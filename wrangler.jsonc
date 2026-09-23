@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "todo-app",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-14",
+  // nodejs_compat: AsyncLocalStorage for the MCP handler. global_fetch_strictly_public: required by
+  // the OAuth provider before it fetches Client ID Metadata Documents.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "todo.matteob.dev", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/mcp", "/mcp/*", "/authorize", "/token", "/register", "/.well-known/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "todo-app",
+      "database_id": "24398615-4bc6-4a77-a6f7-4e7f2ef235ff",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "2dde16142bc94d5588610241d96f771a" }
+  ],
+  "services": [{ "binding": "STD", "service": "save-the-date" }],
+  "observability": { "enabled": true }
+}
