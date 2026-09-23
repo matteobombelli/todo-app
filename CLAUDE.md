@@ -45,8 +45,9 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 ## Sync model
 
 - Every synced row (`lists`, `items`, `events`, `event_exceptions`) has `seq`, `created_at`,
-  `updated_at` and `deleted_at`. Deletes are soft (tombstones) and cascade: list to items, event to
-  exceptions.
+  `updated_at` and `deleted_at`. Deletes are soft (tombstones) and cascade: list to items, item to
+  subtasks, event to exceptions. Moving or completing an item also moves or completes its subtasks
+  (`cascadeToSubtasks` in `shared/items.ts`, applied by the server and mirrored by the client).
 - Each write bumps the owner's `user_seq` and stamps the touched rows with it, in one D1 batch.
   `GET /api/sync?since=N` returns rows with `seq > N` (tombstones included, except when N is 0) and the
   new cursor.
@@ -58,7 +59,9 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
   `outbox`; `sync()` flushes the outbox, then pulls. A pulled row never overwrites a record with a
   queued mutation. Sync runs on start, `online`, becoming visible, 300 ms after a write, and every
   minute while visible (no Background Sync API: iOS lacks it).
-- MCP writes go through the same `applyMutation`, so the app sees them on its next pull.
+- MCP writes go through `applyMutations`, the batch form of `applyMutation` with the same checks, so
+  the app sees them on its next pull. Each tool call is one all-or-nothing batch with a single
+  `user_seq` bump; the write tools take one entry or an array (`items` / `events`).
 
 ## Time
 

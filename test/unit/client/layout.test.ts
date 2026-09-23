@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { monthWeeks, placeBars, placeBlocks } from "../../../src/calendar/layout";
 
 describe("monthWeeks", () => {
-  it("covers the month with Monday-start weeks", () => {
+  it("covers the month with Sunday-start weeks", () => {
     // September 2026 starts on a Tuesday and ends on a Wednesday.
-    expect(monthWeeks("2026-09-15")).toEqual(["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"]);
-    // February 2027 starts on a Monday and spans exactly four weeks.
-    expect(monthWeeks("2027-02-01")).toEqual(["2027-02-01", "2027-02-08", "2027-02-15", "2027-02-22"]);
-    // March 2026 starts on a Sunday: six rows.
-    expect(monthWeeks("2026-03-31")).toHaveLength(6);
+    expect(monthWeeks("2026-09-15")).toEqual(["2026-08-30", "2026-09-06", "2026-09-13", "2026-09-20", "2026-09-27"]);
+    // February 2026 starts on a Sunday and spans exactly four weeks.
+    expect(monthWeeks("2026-02-01")).toEqual(["2026-02-01", "2026-02-08", "2026-02-15", "2026-02-22"]);
+    // August 2026 starts on a Saturday: six rows.
+    expect(monthWeeks("2026-08-31")).toHaveLength(6);
   });
 });
 

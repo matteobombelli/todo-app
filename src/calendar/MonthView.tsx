@@ -83,12 +83,12 @@ export function MonthView({
           </span>
         ))}
       </div>
-      {weeks.map((monday) => {
-        const placed = placeBars(bars, monday, 7);
+      {weeks.map((start) => {
+        const placed = placeBars(bars, start, 7);
         return (
-          <div key={monday} className="month__week" role="row">
+          <div key={start} className="month__week" role="row">
             {Array.from({ length: 7 }, (_, i) => {
-              const date = addDays(monday, i);
+              const date = addDays(start, i);
               const dots = dotsByDate.get(date) ?? [];
               const hidden = placed.filter((b) => b.lane >= MAX_LANES && b.startCol <= i && b.endCol >= i).length;
               const classes = ["month__day", date.slice(0, 7) !== month && "month__day--outside", date === today && "month__day--today"];

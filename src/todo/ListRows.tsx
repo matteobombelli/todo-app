@@ -1,14 +1,27 @@
 import { ChevronRight } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { NavLink } from "react-router";
 import { paletteVar } from "../components/ColorPicker";
+import { useSortable } from "../components/gestures";
 import { setNavDirection } from "../components/motion";
 import { useData, useLists } from "../data/hooks";
+import { store } from "../data/instance";
 
-/** Every list with its counts. `compact` is the sidebar version: open count only, no chevron. */
+/**
+ * Every list with its counts, reordered by long-press and drag. `compact` is the sidebar version:
+ * open count only, no chevron.
+ */
 export function ListRows({ compact }: { compact?: boolean }) {
   const lists = useLists();
   const { items } = useData().tables;
+  const rows = useRef<HTMLUListElement>(null);
+
+  useSortable(rows, lists.map((l) => l.id).join(), (from, to) => {
+    const next = [...lists];
+    next.splice(to, 0, ...next.splice(from, 1));
+    const moved = next.flatMap((list, i) => (list.sort_order === i + 1 ? [] : [{ ...list, sort_order: i + 1 }]));
+    void store.upsertMany("lists", moved);
+  });
 
   const counts = useMemo(() => {
     const out = new Map<string, { open: number; done: number }>();
@@ -22,7 +35,7 @@ export function ListRows({ compact }: { compact?: boolean }) {
   }, [items]);
 
   return (
-    <ul className="rows">
+    <ul ref={rows} className={compact ? "rows" : "rows rows--large"}>
       {lists.map((list) => {
         const c = counts.get(list.id) ?? { open: 0, done: 0 };
         return (

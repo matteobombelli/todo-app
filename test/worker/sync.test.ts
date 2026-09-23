@@ -215,6 +215,50 @@ describe("sync and mutations", () => {
     expect(res.status).toBe("rejected");
   });
 
+  it("checks that a subtask's parent is a top-level item in the same list", async () => {
+    const cookie = await login();
+    const home = list();
+    const away = list();
+    const parent = item(home.id);
+    const child = item(home.id, { parent_id: parent.id });
+    const withSubtask = item(home.id);
+    const itsSubtask = item(home.id, { parent_id: withSubtask.id });
+    await mutate(cookie, [upsert("lists", home), upsert("lists", away), upsert("items", parent), upsert("items", child), upsert("items", withSubtask), upsert("items", itsSubtask)]);
+
+    const errors = async (record: Record<string, unknown>) => {
+      const [result] = await mutate(cookie, [upsert("items", record)]);
+      return result.status === "rejected" ? result.error : "applied";
+    };
+    expect(await errors(item(away.id, { parent_id: parent.id }))).toBe("parent_id names an item in another list");
+    expect(await errors(item(home.id, { parent_id: child.id }))).toBe("parent_id names a subtask, and subtasks can't have their own");
+    expect(await errors({ ...parent, parent_id: parent.id })).toBe("An item can't be its own subtask");
+    expect(await errors({ ...withSubtask, parent_id: parent.id })).toBe("An item with subtasks can't become a subtask");
+    expect(await errors(item(home.id, { parent_id: id() }))).toBe("parent_id does not name a live item");
+    // A client from before subtasks leaves parent_id out, which makes a top-level item.
+    expect(await errors(item(home.id))).toBe("applied");
+  });
+
+  it("carries subtasks along when their parent moves, completes or is deleted", async () => {
+    const cookie = await login();
+    const home = list();
+    const away = list();
+    const parent = item(home.id);
+    const open = item(home.id, { parent_id: parent.id });
+    const done = item(home.id, { parent_id: parent.id, completed_at: 7 });
+    await mutate(cookie, [upsert("lists", home), upsert("lists", away), upsert("items", parent), upsert("items", open), upsert("items", done)]);
+    const { cursor } = await sync(cookie);
+
+    await mutate(cookie, [upsert("items", { ...parent, list_id: away.id, completed_at: 20 })]);
+    const pulled = await sync(cookie, cursor);
+    const byId = new Map(pulled.items.map((i) => [i.id, i]));
+    expect(byId.get(open.id)).toMatchObject({ list_id: away.id, completed_at: 20, parent_id: parent.id });
+    expect(byId.get(done.id)).toMatchObject({ list_id: away.id, completed_at: 7 });
+
+    await mutate(cookie, [del("items", parent.id)]);
+    const after = await sync(cookie, pulled.cursor);
+    expect(after.items.filter((i) => i.deleted_at !== null).map((i) => i.id).sort()).toEqual([parent.id, open.id, done.id].sort());
+  });
+
   it("isolates users", async () => {
     const alice = await login();
     const bob = await login();

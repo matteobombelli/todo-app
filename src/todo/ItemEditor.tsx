@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import type { Item } from "../../shared/entities";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Modal, useModal } from "../components/Modal";
-import { useLists } from "../data/hooks";
+import { useData, useLists } from "../data/hooks";
 import { store } from "../data/instance";
 
 export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const lists = useLists();
+  const { items } = useData().tables;
   const [title, setTitle] = useState(item.title);
   const [notes, setNotes] = useState(item.notes);
   const [dueDate, setDueDate] = useState(item.due_date ?? "");
@@ -14,6 +15,8 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
   const [listId, setListId] = useState(item.list_id);
   const [modal, close] = useModal(onClose);
   const [confirmDialog, confirm] = useConfirm();
+
+  const subtaskCount = useMemo(() => Object.values(items).filter((i) => i.parent_id === item.id).length, [items, item.id]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -25,12 +28,15 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
       due_date: dueDate || null,
       due_time: dueDate && dueTime ? dueTime : null,
       list_id: listId,
+      // A subtask moved to another list on its own leaves its parent behind.
+      parent_id: listId === item.list_id ? item.parent_id : null,
     });
     close();
   }
 
   async function onDelete() {
-    if (!(await confirm("Delete item?", `"${item.title}" will be deleted.`, "Delete"))) return;
+    const detail = subtaskCount ? ` with its ${subtaskCount === 1 ? "subtask" : `${subtaskCount} subtasks`}` : "";
+    if (!(await confirm("Delete item?", `"${item.title}"${detail} will be deleted.`, "Delete"))) return;
     await store.remove("items", item.id);
     close();
   }

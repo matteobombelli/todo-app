@@ -38,6 +38,11 @@ export function weekday(date: string): number {
   return (toDayNumber(date) + 3) % 7;
 }
 
+/** The Sunday on or before `date`: the calendar's weeks run Sunday to Saturday. */
+export function weekStart(date: string): string {
+  return addDays(date, -((toDayNumber(date) + 4) % 7));
+}
+
 export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }

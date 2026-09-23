@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { List } from "../../shared/entities";
 import { newId } from "../../shared/ids";
 import type { PaletteKey } from "../../shared/palette";
@@ -19,7 +19,13 @@ export function ListEditor({
 }) {
   const [name, setName] = useState(list?.name ?? "");
   const [color, setColor] = useState<PaletteKey>(list?.color ?? "blue");
-  const [modal, close] = useModal(onClose);
+  // Deleting waits for the exit animation: the list page unmounts (and this editor with it) as soon
+  // as its list is gone.
+  const deleting = useRef(false);
+  const [modal, close] = useModal(() => {
+    if (deleting.current && list) void store.remove("lists", list.id);
+    onClose();
+  });
   const [confirmDialog, confirm] = useConfirm();
 
   async function onSubmit(e: FormEvent) {
@@ -36,7 +42,7 @@ export function ListEditor({
 
   async function onDelete() {
     if (!list || !(await confirm("Delete list?", `"${list.name}" and all its items will be deleted.`, "Delete"))) return;
-    await store.remove("lists", list.id);
+    deleting.current = true;
     close();
   }
 
@@ -45,7 +51,7 @@ export function ListEditor({
       <form className="form" onSubmit={(e) => void onSubmit(e)}>
         <label className="field">
           <span className="field__label">Name</span>
-          <input autoFocus required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+          <input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <div className="field">
           <span className="field__label">Colour</span>

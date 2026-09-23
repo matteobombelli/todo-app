@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAgenda, type ExternalEvent } from "../../shared/agenda";
 import type { Item } from "../../shared/entities";
-import { isOverdue, orderItems } from "../../shared/items";
+import { cascadeToSubtasks, isOverdue, orderItems } from "../../shared/items";
 import type { Occurrence } from "../../shared/recurrence";
 
 let n = 0;
@@ -15,6 +15,7 @@ function item(overrides: Partial<Item> = {}): Item {
     due_date: null,
     due_time: null,
     completed_at: null,
+    parent_id: null,
     created_at: n,
     updated_at: n,
     seq: n,
@@ -120,7 +121,46 @@ describe("items", () => {
     const doneLate = item({ completed_at: 20 });
     const deleted = item({ deleted_at: 1 });
     const { open, completed } = orderItems([undatedNew, dateOnly, doneEarly, timed, undatedOld, overdue, doneLate, deleted]);
-    expect(open.map((i) => i.id)).toEqual([overdue.id, timed.id, dateOnly.id, undatedOld.id, undatedNew.id]);
+    expect(open.map(({ item }) => item.id)).toEqual([overdue.id, timed.id, dateOnly.id, undatedOld.id, undatedNew.id]);
     expect(completed.map((i) => i.id)).toEqual([doneLate.id, doneEarly.id]);
+  });
+
+  it("puts open subtasks under their parent, and a subtask whose parent is done on its own", () => {
+    const first = item({ due_date: "2026-09-01" });
+    const second = item();
+    const late = item({ parent_id: first.id, due_date: "2026-09-30" });
+    const early = item({ parent_id: first.id, due_date: "2026-09-02" });
+    const doneParent = item({ completed_at: 5 });
+    const stranded = item({ parent_id: doneParent.id });
+    const { open } = orderItems([second, late, stranded, first, doneParent, early]);
+    expect(open.map(({ item, nested }) => [item.id, nested])).toEqual([
+      [first.id, false],
+      [early.id, true],
+      [late.id, true],
+      [second.id, false],
+      [stranded.id, false],
+    ]);
+  });
+});
+
+describe("cascadeToSubtasks", () => {
+  const sub = (completed_at: number | null) => ({ id: `s${completed_at}`, list_id: "l1", completed_at });
+
+  it("moves subtasks with their parent and completes the open ones with it", () => {
+    const subs = [sub(null), sub(3)];
+    expect(cascadeToSubtasks({ list_id: "l1", completed_at: null }, { list_id: "l2", completed_at: null }, subs)).toEqual([
+      { id: "snull", list_id: "l2", completed_at: null },
+      { id: "s3", list_id: "l2", completed_at: 3 },
+    ]);
+    expect(cascadeToSubtasks({ list_id: "l1", completed_at: null }, { list_id: "l1", completed_at: 9 }, subs)).toEqual([
+      { id: "snull", list_id: "l1", completed_at: 9 },
+    ]);
+  });
+
+  it("leaves subtasks alone when the parent is reopened or only edited", () => {
+    const subs = [sub(null), sub(3)];
+    expect(cascadeToSubtasks({ list_id: "l1", completed_at: 9 }, { list_id: "l1", completed_at: null }, subs)).toEqual([]);
+    expect(cascadeToSubtasks({ list_id: "l1", completed_at: null }, { list_id: "l1", completed_at: null }, subs)).toEqual([]);
+    expect(cascadeToSubtasks(null, { list_id: "l1", completed_at: 9 }, subs)).toEqual([]);
   });
 });

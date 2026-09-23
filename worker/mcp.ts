@@ -22,10 +22,102 @@ const RRule = z
     "Recurrence as an RRULE subset: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY, optional INTERVAL=n, BYDAY=MO,TU,... (weekly only), and UNTIL=YYYYMMDD or COUNT=n. Example: FREQ=WEEKLY;BYDAY=MO,WE",
   );
 
+const Parent = z.string().describe("The parent item's id: makes this a subtask (one level deep, same list). Completing, moving or deleting a parent does the same to its subtasks");
+
+const ItemCreate = z.object({
+  list: ListRef,
+  parent: Parent.optional(),
+  title: z.string(),
+  notes: z.string().optional(),
+  due_date: DateArg.optional(),
+  due_time: TimeArg.optional(),
+});
+
+const ItemUpdate = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  notes: z.string().optional(),
+  due_date: DateArg.nullable().optional(),
+  due_time: TimeArg.nullable().optional(),
+  completed: z.boolean().optional(),
+  list: ListRef.optional(),
+  parent: Parent.nullable().optional().describe("Parent item id, or null to make it a top-level item again. Moving a subtask to another list on its own clears it"),
+});
+
+const ItemDelete = z.object({ id: z.string() });
+
+const EventCreate = z.object({
+  title: z.string(),
+  start_date: DateArg,
+  start_time: TimeArg.optional(),
+  end_date: DateArg.optional(),
+  end_time: TimeArg.optional(),
+  all_day: z.boolean().optional(),
+  notes: z.string().optional(),
+  color: Color.optional(),
+  rrule: RRule.optional(),
+});
+
+const EventUpdate = z.object({
+  id: z.string().describe("event_id"),
+  scope: EventScope.optional().describe('Default "occurrence" when occurrence_date is given, else "series"; ignored for non-recurring events'),
+  occurrence_date: DateArg.optional(),
+  title: z.string().optional(),
+  notes: z.string().optional(),
+  color: Color.optional(),
+  all_day: z.boolean().optional(),
+  start_date: DateArg.optional(),
+  start_time: TimeArg.nullable().optional(),
+  end_date: DateArg.optional(),
+  end_time: TimeArg.nullable().optional(),
+  rrule: RRule.nullable().optional(),
+});
+
+const EventDelete = z.object({
+  id: z.string().describe("event_id"),
+  scope: EventScope.optional().describe('Default "occurrence" when occurrence_date is given, else "series"'),
+  occurrence_date: DateArg.optional(),
+});
+
 const TIME_NOTE =
   "Dates and times are floating local wall-clock values in the user's timezone (get_agenda reports it and today's date).";
 const STD_NOTE =
   'When the account is connected to save-the-date, entries with source "save-the-date" come from that separate app and are read-only: they cannot be edited or deleted here.';
+
+const MAX_BATCH = 100;
+
+/**
+ * A write tool's input: one op's fields at the top level, or several ops under `key`. The MCP spec
+ * requires an object schema, so both forms share one and `batched` tells them apart.
+ */
+function batchable<T extends z.ZodRawShape>(op: z.ZodObject<T>, key: string, what: string) {
+  return op.partial().extend({
+    [key]: z
+      .array(op)
+      .min(1)
+      .max(MAX_BATCH)
+      .optional()
+      .describe(`Up to ${MAX_BATCH} ${what} at once, applied together: if any fails, nothing is changed. Leave the single-${what.replace(/s$/, "")} fields out when using this.`),
+  });
+}
+
+function batched<T>(args: Record<string, unknown>, key: string, op: z.ZodType<T>): { many: boolean; ops: T[] } {
+  const { [key]: many, ...single } = args;
+  if (many === undefined) return { many: false, ops: [todo.check(op, single)] };
+  if (Object.values(single).some((v) => v !== undefined)) {
+    throw new todo.ToolError(`Give either one entry's fields or \`${key}\`, not both`);
+  }
+  return { many: true, ops: many as T[] };
+}
+
+/** Runs a batched write; a single-form call gets its one result back, a bulk call the array. */
+function write<T, R>(args: Record<string, unknown>, key: string, op: z.ZodType<T>, apply: (ops: T[]) => Promise<R[]>) {
+  return run(async () => {
+    const { many, ops } = batched(args, key, op);
+    const results = await apply(ops);
+    return many ? results : results[0];
+  });
+}
 
 type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
 
@@ -95,39 +187,29 @@ export function buildServer(env: Env, userId: string): McpServer {
   server.registerTool(
     "create_item",
     {
-      description: `Add a todo item to a list. due_time needs due_date. ${TIME_NOTE}`,
-      inputSchema: z.object({
-        list: ListRef,
-        title: z.string(),
-        notes: z.string().optional(),
-        due_date: DateArg.optional(),
-        due_time: TimeArg.optional(),
-      }),
+      description: `Add a todo item to a list, or several with \`items\` in one call. due_time needs due_date. ${TIME_NOTE}`,
+      inputSchema: batchable(ItemCreate, "items", "items"),
     },
-    (input) => run(() => todo.createItem(s, input)),
+    (args) => write(args, "items", ItemCreate, (ops) => todo.createItems(s, ops)),
   );
 
   server.registerTool(
     "update_item",
     {
-      description: `Edit a todo item: title, notes, due date/time (null clears), completed (true marks it done, false reopens it), or move it to another list. ${TIME_NOTE}`,
-      inputSchema: z.object({
-        id: z.string(),
-        title: z.string().optional(),
-        notes: z.string().optional(),
-        due_date: DateArg.nullable().optional(),
-        due_time: TimeArg.nullable().optional(),
-        completed: z.boolean().optional(),
-        list: ListRef.optional(),
-      }),
+      description: `Edit a todo item: title, notes, due date/time (null clears), completed (true marks it done, false reopens it), or move it to another list. Edit several with \`items\` in one call. ${TIME_NOTE}`,
+      inputSchema: batchable(ItemUpdate, "items", "items"),
     },
-    ({ id, ...patch }) => run(() => todo.updateItem(s, id, patch)),
+    (args) => write(args, "items", ItemUpdate, (ops) => todo.updateItems(s, ops)),
   );
 
   server.registerTool(
     "delete_item",
-    { description: "Delete a todo item.", inputSchema: z.object({ id: z.string() }), annotations: { destructiveHint: true } },
-    ({ id }) => run(() => todo.deleteItem(s, id)),
+    {
+      description: "Delete a todo item, or several with `items` in one call.",
+      inputSchema: batchable(ItemDelete, "items", "items"),
+      annotations: { destructiveHint: true },
+    },
+    (args) => write(args, "items", ItemDelete, (ops) => todo.deleteItems(s, ops.map((op) => op.id))),
   );
 
   server.registerTool(
@@ -143,58 +225,29 @@ export function buildServer(env: Env, userId: string): McpServer {
   server.registerTool(
     "create_event",
     {
-      description: `Create a calendar event. Give start_time for a timed event (end_time defaults to an hour later; an end_time before start_time ends the next day), or omit it for an all-day event (end_date for several days). ${TIME_NOTE}`,
-      inputSchema: z.object({
-        title: z.string(),
-        start_date: DateArg,
-        start_time: TimeArg.optional(),
-        end_date: DateArg.optional(),
-        end_time: TimeArg.optional(),
-        all_day: z.boolean().optional(),
-        notes: z.string().optional(),
-        color: Color.optional(),
-        rrule: RRule.optional(),
-      }),
+      description: `Create a calendar event, or several with \`events\` in one call. Give start_time for a timed event (end_time defaults to an hour later; an end_time before start_time ends the next day), or omit it for an all-day event (end_date for several days). ${TIME_NOTE}`,
+      inputSchema: batchable(EventCreate, "events", "events"),
     },
-    (input) => run(() => todo.createEvent(s, input)),
+    (args) => write(args, "events", EventCreate, (ops) => todo.createEvents(s, ops)),
   );
 
   server.registerTool(
     "update_event",
     {
-      description: `Edit a calendar event. For a recurring event pass scope, and occurrence_date (from list_events) when scope is "occurrence". Omitted fields stay as they are; moving a timed event keeps its duration unless end_time is given. rrule changes need scope "series" (null stops repeating). ${TIME_NOTE} ${STD_NOTE}`,
-      inputSchema: z.object({
-        id: z.string().describe("event_id"),
-        scope: EventScope.optional().describe('Default "occurrence" when occurrence_date is given, else "series"; ignored for non-recurring events'),
-        occurrence_date: DateArg.optional(),
-        title: z.string().optional(),
-        notes: z.string().optional(),
-        color: Color.optional(),
-        all_day: z.boolean().optional(),
-        start_date: DateArg.optional(),
-        start_time: TimeArg.nullable().optional(),
-        end_date: DateArg.optional(),
-        end_time: TimeArg.nullable().optional(),
-        rrule: RRule.nullable().optional(),
-      }),
+      description: `Edit a calendar event, or several with \`events\` in one call. For a recurring event pass scope, and occurrence_date (from list_events) when scope is "occurrence". Omitted fields stay as they are; moving a timed event keeps its duration unless end_time is given. rrule changes need scope "series" (null stops repeating). ${TIME_NOTE} ${STD_NOTE}`,
+      inputSchema: batchable(EventUpdate, "events", "events"),
     },
-    ({ id, scope, occurrence_date, ...patch }) =>
-      run(() => todo.updateEvent(s, id, scope ?? (occurrence_date ? "occurrence" : "series"), occurrence_date, patch)),
+    (args) => write(args, "events", EventUpdate, (ops) => todo.updateEvents(s, ops)),
   );
 
   server.registerTool(
     "delete_event",
     {
-      description: `Delete a calendar event. For a recurring event, scope "occurrence" with occurrence_date removes one occurrence; "series" removes them all. ${STD_NOTE}`,
-      inputSchema: z.object({
-        id: z.string().describe("event_id"),
-        scope: EventScope.optional().describe('Default "occurrence" when occurrence_date is given, else "series"'),
-        occurrence_date: DateArg.optional(),
-      }),
+      description: `Delete a calendar event, or several with \`events\` in one call. For a recurring event, scope "occurrence" with occurrence_date removes one occurrence; "series" removes them all. ${STD_NOTE}`,
+      inputSchema: batchable(EventDelete, "events", "events"),
       annotations: { destructiveHint: true },
     },
-    ({ id, scope, occurrence_date }) =>
-      run(() => todo.deleteEvent(s, id, scope ?? (occurrence_date ? "occurrence" : "series"), occurrence_date)),
+    (args) => write(args, "events", EventDelete, (ops) => todo.deleteEvents(s, ops)),
   );
 
   server.registerTool(

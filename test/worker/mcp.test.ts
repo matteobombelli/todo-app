@@ -1,4 +1,4 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { connectStd, registerAndLogin } from "./helpers";
 
@@ -312,5 +312,112 @@ describe("MCP tools", () => {
     const [day] = (await call(alone, "get_agenda", { date: "2026-09-20" })).data.days;
     expect(day.timed).toEqual([]);
     expect(day.all_day).toEqual([]);
+  });
+});
+
+describe("MCP bulk writes", () => {
+  let token: string;
+  const seq = async () =>
+    (await env.DB.prepare("SELECT value FROM user_seq JOIN users ON users.id = user_seq.user_id WHERE email = ?")
+      .bind("bulk@example.com")
+      .first<{ value: number }>())!.value;
+  const titles = async (status = "open") =>
+    (await call(token, "list_items", { status })).data.map((i: { title: string }) => i.title).sort();
+
+  beforeAll(async () => {
+    token = await connect("bulk@example.com", false);
+    await rpc(token, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });
+    await call(token, "create_list", { name: "Chores" });
+    await call(token, "create_list", { name: "Errands" });
+  });
+
+  it("creates, updates and deletes many items in one write", async () => {
+    const before = await seq();
+    const created = await call(token, "create_item", {
+      items: [
+        { list: "chores", title: "Dishes" },
+        { list: "Errands", title: "Post office", due_date: "2026-09-24" },
+        { list: "Chores", title: "Laundry" },
+      ],
+    });
+    expect(created.isError).toBe(false);
+    expect(created.data.map((i: { title: string }) => i.title)).toEqual(["Dishes", "Post office", "Laundry"]);
+    expect(await seq()).toBe(before + 1);
+
+    const [dishes, post, laundry] = created.data as { id: string }[];
+    const updated = await call(token, "update_item", {
+      items: [
+        { id: dishes.id, completed: true },
+        { id: post.id, title: "Post office run", list: "Chores" },
+        { id: post.id, due_date: null },
+      ],
+    });
+    expect(updated.data[2]).toMatchObject({ title: "Post office run", due_date: null });
+    expect(await titles()).toEqual(["Laundry", "Post office run"]);
+
+    const deleted = await call(token, "delete_item", { items: [{ id: laundry.id }, { id: dishes.id }] });
+    expect(deleted.data.map((i: { title: string }) => i.title)).toEqual(["Laundry", "Dishes"]);
+    expect(await titles("all")).toEqual(["Post office run"]);
+  });
+
+  it("changes nothing when any entry fails, and names each failure", async () => {
+    const before = await seq();
+    const failed = await call(token, "create_item", {
+      items: [
+        { list: "Chores", title: "Vacuum" },
+        { list: "Garden", title: "Weeding" },
+        { list: "Chores", title: "Bad", due_time: "10:00" },
+      ],
+    });
+    expect(failed.isError).toBe(true);
+    expect(failed.data).toMatch(/^Nothing was changed\. \[1\] No list named or with id "Garden"\..*; \[2\] /);
+    expect(await seq()).toBe(before);
+    expect(await titles()).toEqual(["Post office run"]);
+  });
+
+  it("keeps the single form and refuses a mix of both", async () => {
+    const one = await call(token, "create_item", { list: "Chores", title: "Mop" });
+    expect(one.data).toMatchObject({ title: "Mop" });
+    const mixed = await call(token, "create_item", { list: "Chores", title: "Sweep", items: [{ list: "Chores", title: "Dust" }] });
+    expect(mixed).toEqual({ isError: true, data: "Give either one entry's fields or `items`, not both" });
+    expect(await titles()).toEqual(["Mop", "Post office run"]);
+  });
+
+  it("plans later entries against subtasks as their parent's entry leaves them", async () => {
+    const parent = (await call(token, "create_item", { list: "Errands", title: "Trip" })).data;
+    const [open] = (await call(token, "create_item", { items: [{ list: "Errands", parent: parent.id, title: "Tickets" }] })).data;
+    const result = await call(token, "update_item", {
+      items: [
+        { id: parent.id, completed: true, list: "Chores" },
+        { id: open.id, title: "Train tickets" },
+      ],
+    });
+    expect(result.isError).toBe(false);
+    expect(result.data[1]).toMatchObject({ title: "Train tickets", list_id: result.data[0].list_id, parent_id: parent.id });
+    expect(result.data[1].completed_at).toEqual(expect.any(Number));
+  });
+
+  it("creates and deletes many events, occurrences included", async () => {
+    const created = (
+      await call(token, "create_event", {
+        events: [
+          { title: "Gym", start_date: "2026-09-21", start_time: "07:00", rrule: "FREQ=DAILY;COUNT=5" },
+          { title: "Dentist", start_date: "2026-09-22", start_time: "15:00" },
+        ],
+      })
+    ).data as { id: string }[];
+    await call(token, "delete_event", {
+      events: [
+        { id: created[0].id, occurrence_date: "2026-09-22" },
+        { id: created[0].id, occurrence_date: "2026-09-23" },
+        { id: created[1].id },
+      ],
+    });
+    const listed = (await call(token, "list_events", { from: "2026-09-21", to: "2026-09-25" })).data.events;
+    expect(listed.map((e: { title: string; occurrence_date: string }) => `${e.title} ${e.occurrence_date}`)).toEqual([
+      "Gym 2026-09-21",
+      "Gym 2026-09-24",
+      "Gym 2026-09-25",
+    ]);
   });
 });

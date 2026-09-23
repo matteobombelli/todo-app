@@ -41,6 +41,8 @@ export const ItemFields = z
     due_date: DateStr.nullable(),
     due_time: TimeStr.nullable(),
     completed_at: z.number().int().nullable(),
+    // A subtask's parent item. Records and clients from before subtasks leave it out.
+    parent_id: Id.nullable().default(null),
   })
   .refine((i) => i.due_time === null || i.due_date !== null, { message: "due_time needs due_date", path: ["due_time"] });
 
@@ -132,9 +134,10 @@ export interface EntityRecord {
 export type Fields<E extends Entity> = Omit<EntityRecord[E], keyof Meta>;
 
 /** Rows whose deletion follows their parent's, on the server and in the client mirror. */
-export const CHILDREN: Partial<Record<Entity, { entity: Entity; column: string }>> = {
-  lists: { entity: "items", column: "list_id" },
-  events: { entity: "event_exceptions", column: "event_id" },
+export const CHILDREN: Partial<Record<Entity, { entity: Entity; column: string }[]>> = {
+  lists: [{ entity: "items", column: "list_id" }],
+  items: [{ entity: "items", column: "parent_id" }],
+  events: [{ entity: "event_exceptions", column: "event_id" }],
 };
 
 export const FIELD_SCHEMAS = {

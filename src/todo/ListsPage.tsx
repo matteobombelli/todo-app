@@ -11,8 +11,9 @@ export default function ListsPage() {
   const wide = useMediaQuery(WIDE);
   const [creating, setCreating] = useState(false);
 
-  // Wide screens list the lists in the sidebar, so this page would only repeat it.
-  if (wide && lists.length > 0) return <Navigate to={`/todo/${lists[0].id}`} replace />;
+  // Wide screens list the lists in the sidebar, so this page would only repeat it. The redirect
+  // waits for an open editor, which would otherwise unmount before its exit animation.
+  if (wide && lists.length > 0 && !creating) return <Navigate to={`/todo/${lists[0].id}`} replace />;
 
   return (
     <div className="page">

@@ -17,8 +17,8 @@ The repo `/home/matte/todo-app` is empty (one commit, README only). This plan wa
 | Reminders | None in v1. |
 | Save-the-date | **Read-only**, fetched live through a service binding. Shows proposed (hatched), upcoming and saved. |
 | Recurrence | RRULE subset (daily / weekly on chosen weekdays / monthly / yearly, interval, end: never / until date / count). Edit or delete "this occurrence" or "whole series". Todo items do not recur. |
-| Week view | Rolling 7 days starting at the selected date. |
-| Item order | Auto: overdue, then by due date/time, then undated (by created). Completed collapsed at bottom as "Completed (n)". No drag. |
+| Week view | Sunday to Saturday around the selected date (the month grid starts on Sunday too). |
+| Item order | Auto: overdue, then by due date/time, then undated (by created), each item followed by its open subtasks (one level deep). Completed collapsed at bottom as "Completed (n)". Long-press and drop an item onto another to make it a subtask, or onto empty space to make it top-level; dragging never reorders items. A parent's subtasks fold away behind a chevron (remembered per device). Lists are reordered by long-press and drag. |
 | Overdue | Red in lists; pinned in an "Overdue" section at the top of today's agenda and in Claude's rundown. |
 | Timezone | Floating local times (`YYYY-MM-DD`, `HH:MM`, no zone), same as save-the-date. A per-user `timezone` setting (default `America/Los_Angeles`) is used only by the server to know "today" (MCP rundown, overdue). |
 
@@ -36,7 +36,7 @@ Every user-owned table has `user_id`, `created_at`, `updated_at`, `seq` (INTEGER
 - `users(id, email, password_hash, timezone, created_at)`; `sessions(id = sha256(token), user_id, expires_at)` with 90-day sliding expiry so the PWA stays logged in.
 - `user_seq(user_id PK, value)`: sync cursor source.
 - `lists(id, name, color, sort_order)`. `color` is a palette key.
-- `items(id, list_id, title, notes, due_date?, due_time?, completed_at?)`.
+- `items(id, list_id, title, notes, due_date?, due_time?, completed_at?, parent_id?)`. `parent_id` makes a subtask of a top-level item in the same list.
 - `events(id, title, notes, color, all_day, start_date, start_time?, end_date, end_time?, rrule?)`. Date ranges via `start_date..end_date`; time ranges via times; timed events may cross midnight via `end_date`.
 - `event_exceptions(id, event_id, occurrence_date, cancelled, title?, notes?, color?, start_date?, start_time?, end_date?, end_time?, all_day?)`: per-occurrence override or cancellation. Unique on `(event_id, occurrence_date)`.
 - OAuth state lives in KV (`OAUTH_KV`) as required by `@cloudflare/workers-oauth-provider`.
@@ -72,9 +72,9 @@ Two tabs (bottom tab bar on mobile, top/side on desktop): **Todo** and **Calenda
 - List detail: add item inline; item row has checkbox, title, due date/time chip (red if overdue); tap opens editor (title, notes, due date, optional due time, move to list, delete). Ordering per settled decision.
 
 **Calendar tab**
-- Header shows the current period (e.g. "September 2026", or the 7-day / day range), prev/next, a Today button, and a Month / 7 days / Day toggle. The selected date carries across views.
+- Header shows the current period (e.g. "September 2026", or the week / day range), prev/next, a Today button, and a Month / Week / Day toggle. The selected date carries across views.
 - Month: grid with today highlighted and selected date outlined. Under each date number, dots in list colours for uncompleted items due that day (max 3, then "+"). Events and save-the-date dates render as coloured bars, multi-day bars spanning cells; save-the-date proposed ones hatched. Selecting a date shows that day's agenda below the grid (see `agenda.ts`), with item checkboxes working inline and an Overdue section when the date is today.
-- 7 days (rolling from selected date) and Day: all-day row with bars and untimed due items, then an hourly time grid with timed events as blocks (overlaps laid out side by side), timed due items as small markers, a now-line on today, auto-scrolled to the current time.
+- Week (Sunday to Saturday) and Day: all-day row with bars and untimed due items, then an hourly time grid with timed events as blocks (overlaps laid out side by side), timed due items as small markers, a now-line on today, auto-scrolled to the current time.
 - Event editor: title, notes, colour, all-day toggle, start/end date, start/end time, repeat (preset + custom interval/weekdays/end). Editing a recurring occurrence asks "This event / All events". Save-the-date entries open a read-only sheet with a link to save-the-date.
 
 ## PWA

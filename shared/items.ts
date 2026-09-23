@@ -27,13 +27,38 @@ export function compareItems(a: Item, b: Item): number {
   );
 }
 
-/** Open items in display order, and completed ones most recently completed first. */
-export function orderItems(items: Item[]): { open: Item[]; completed: Item[] } {
+/**
+ * Open items in display order, each followed by its open subtasks (`nested`), and completed ones
+ * most recently completed first. A subtask whose parent isn't open stands on its own.
+ */
+export function orderItems(items: Item[]): { open: { item: Item; nested: boolean }[]; completed: Item[] } {
   const live = items.filter((i) => i.deleted_at === null);
+  const open = live.filter((i) => i.completed_at === null).sort(compareItems);
+  const openIds = new Set(open.map((i) => i.id));
+  const nested = (i: Item) => i.parent_id !== null && openIds.has(i.parent_id);
   return {
-    open: live.filter((i) => i.completed_at === null).sort(compareItems),
+    open: open
+      .filter((i) => !nested(i))
+      .flatMap((parent) => [
+        { item: parent, nested: false },
+        ...open.filter((i) => i.parent_id === parent.id).map((item) => ({ item, nested: true })),
+      ]),
     completed: live
       .filter((i) => i.completed_at !== null)
       .sort((a, b) => (b.completed_at ?? 0) - (a.completed_at ?? 0)),
   };
+}
+
+type Placement = Pick<Item, "list_id" | "completed_at">;
+
+/**
+ * What writing an item does to its subtasks: moving it moves them, and completing it completes the
+ * open ones (reopening leaves them, as in Reminders). Returns only the subtasks that change.
+ */
+export function cascadeToSubtasks<T extends Placement>(before: Placement | null, after: Placement, subtasks: T[]): T[] {
+  const completing = before !== null && before.completed_at === null && after.completed_at !== null;
+  return subtasks.flatMap((sub) => {
+    const completed_at = completing && sub.completed_at === null ? after.completed_at : sub.completed_at;
+    return sub.list_id === after.list_id && completed_at === sub.completed_at ? [] : [{ ...sub, list_id: after.list_id, completed_at }];
+  });
 }

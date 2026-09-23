@@ -67,6 +67,25 @@ describe("DataStore", () => {
     expect(reopened.getSnapshot().pending).toBe(1);
   });
 
+  it("writes several records in one render, each with its own outbox entry", async () => {
+    const { fetch } = fakeServer([]);
+    const store = makeStore(fetch);
+    await store.load("u1");
+    const a = await store.upsert("lists", listFields({ name: "A", sort_order: 1 }));
+    const b = await store.upsert("lists", listFields({ name: "B", sort_order: 2 }));
+    const renders = vi.fn();
+    store.subscribe(renders);
+
+    await store.upsertMany("lists", [
+      { ...a, sort_order: 2 },
+      { ...b, sort_order: 1 },
+    ]);
+    expect(renders).toHaveBeenCalledTimes(1);
+    const { tables, pending } = store.getSnapshot();
+    expect([tables.lists[a.id].sort_order, tables.lists[b.id].sort_order]).toEqual([2, 1]);
+    expect(pending).toBe(4);
+  });
+
   it("clears the mirror when another user loads it", async () => {
     const { fetch } = fakeServer([]);
     const store = makeStore(fetch, "switch");
@@ -179,6 +198,7 @@ describe("DataStore", () => {
       due_date: null,
       due_time: null,
       completed_at: null,
+      parent_id: null,
     });
     const doomed = await store.upsert("items", item(l.id));
     const survivor = await store.upsert("items", item(other.id));
@@ -187,6 +207,40 @@ describe("DataStore", () => {
     expect(Object.keys(tables.items)).toEqual([survivor.id]);
     expect(tables.items[doomed.id]).toBeUndefined();
     expect(pending).toBe(5);
+  });
+
+  it("carries subtasks along when their parent moves, completes or is removed", async () => {
+    const { fetch } = fakeServer([]);
+    const store = makeStore(fetch);
+    await store.load("u1");
+    const home = await store.upsert("lists", listFields());
+    const away = await store.upsert("lists", listFields());
+    const fields = (overrides: Partial<Item> = {}) => ({
+      id: crypto.randomUUID(),
+      list_id: home.id,
+      title: "x",
+      notes: "",
+      due_date: null,
+      due_time: null,
+      completed_at: null,
+      parent_id: null,
+      ...overrides,
+    });
+    const parent = await store.upsert("items", fields());
+    const open = await store.upsert("items", fields({ parent_id: parent.id }));
+    const done = await store.upsert("items", fields({ parent_id: parent.id, completed_at: 7 }));
+    const items = () => store.getSnapshot().tables.items;
+
+    await store.upsert("items", { ...parent, list_id: away.id });
+    expect([items()[open.id].list_id, items()[done.id].list_id]).toEqual([away.id, away.id]);
+
+    const completed = await store.upsert("items", { ...items()[parent.id], completed_at: 20 });
+    expect([items()[open.id].completed_at, items()[done.id].completed_at]).toEqual([completed.completed_at, 7]);
+    // Only the parent's own writes are queued; the server repeats the cascade.
+    expect(store.getSnapshot().pending).toBe(7);
+
+    await store.remove("items", parent.id);
+    expect(Object.keys(items())).toEqual([]);
   });
 
   it("reports 401s and stops", async () => {

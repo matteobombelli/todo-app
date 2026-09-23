@@ -45,14 +45,19 @@
   box-sizing: border-box;
 }
 
+/* The shell scrolls inside itself; the page itself never bounces or pulls to refresh. Only the
+   root element's value reaches the viewport, and iOS hands it any pull that a short, unscrollable
+   .shell__main doesn't take. */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
   font: 16px/1.5 "Figtree Variable", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
-  /* The shell scrolls inside itself; the page itself never bounces or pulls to refresh. */
-  overscroll-behavior: none;
 }
 
 /* App-like touch: no double-tap zoom, text selection or long-press callouts on controls. */
@@ -437,20 +442,6 @@ button:disabled {
   }
 }
 
-@keyframes from-right {
-  from {
-    opacity: 0;
-    transform: translateX(2.5rem);
-  }
-}
-
-@keyframes from-left {
-  from {
-    opacity: 0;
-    transform: translateX(-2.5rem);
-  }
-}
-
 /* Route transitions (view transitions API): a push slides the new screen in over the old one. */
 @keyframes vt-in-right {
   from {
@@ -822,6 +813,68 @@ button:disabled {
   background: var(--surface);
 }
 
+/* A row lifted by a long-press drag (useSortable, useDropOnto), above its neighbours, and the row
+   it would be dropped onto. */
+.drag--lifted {
+  position: relative;
+  z-index: 1;
+}
+
+/* The second selector outranks the pressed state of an item still under the finger. */
+.drag--lifted .row,
+.drag--lifted .item:has(.item__body:active) {
+  background: var(--bg);
+  box-shadow: var(--shadow-hover);
+  transform: scale(1.03);
+}
+
+/* Dropping onto a row: the lifted one shrinks so the target's outline shows around it. */
+.drag--floating .row,
+.drag--floating .item:has(.item__body:active) {
+  transform: scale(0.92);
+}
+
+.drag--target .row {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  box-shadow: inset 0 0 0 var(--stroke) var(--accent);
+}
+
+/* The todo tab's lists and items: roomier than the sidebar and agenda, with a divider between rows. */
+.rows--large {
+  gap: 0;
+}
+
+.rows--large > li + li {
+  border-top: 1px solid var(--border);
+  transition: border-color var(--medium) var(--ease-out);
+}
+
+/* A folded-away subtask: its divider goes with it. */
+.rows--large > li.rows__hidden {
+  border-top-color: transparent;
+}
+
+.rows--large .row {
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.0625rem;
+}
+
+.rows--large .item--subtask {
+  padding-left: 3rem;
+}
+
+.rows--large .check {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.rows--large .dot {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
 .row__title {
   flex: 1;
   min-width: 0;
@@ -849,6 +902,24 @@ button:disabled {
   border: 0;
   background: transparent;
   text-align: left;
+}
+
+.item__fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.item__fold-chevron {
+  transition: transform var(--medium) var(--ease-out);
+}
+
+.item__fold[aria-expanded="true"] .item__fold-chevron {
+  transform: rotate(90deg);
 }
 
 .item__body:active:not(:disabled) {
@@ -1305,8 +1376,11 @@ button:disabled {
   color: var(--fg);
 }
 
-/* Swiped by useSwipe. Each period (month, week, day) enters from the side it came from. */
+/* The track is swiped by useSwipe. It holds the current period (month, week, day) with its
+   neighbours laid either side, so they follow the finger in; the page clips them sideways only,
+   leaving vertical overflow to scroll. */
 .cal-swipe,
+.cal-track,
 .period {
   display: flex;
   flex-direction: column;
@@ -1315,19 +1389,30 @@ button:disabled {
 }
 
 .cal-swipe {
+  overflow-x: clip;
+}
+
+.cal-track {
+  position: relative;
   touch-action: pan-y;
+}
+
+.period--prev,
+.period--next {
+  position: absolute;
+  inset: 0;
+}
+
+.period--prev {
+  transform: translateX(-100%);
+}
+
+.period--next {
+  transform: translateX(100%);
 }
 
 .period--fade {
   animation: fade-in var(--medium) var(--ease-out);
-}
-
-.period--from-right {
-  animation: from-right var(--medium) var(--ease-out);
-}
-
-.period--from-left {
-  animation: from-left var(--medium) var(--ease-out);
 }
 
 .cal-month {
@@ -1581,10 +1666,13 @@ button:disabled {
   text-decoration: line-through;
 }
 
+/* A scroll container doesn't inherit the swipe track's touch-action, so it repeats it: horizontal
+   drags stay with the swipe. */
 .tgrid__scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  touch-action: pan-y;
 }
 
 .tgrid__body {

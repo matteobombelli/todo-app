@@ -1,11 +1,11 @@
-import { addDays, daysBetween, daysInMonth, toMinutes, weekday } from "../../shared/dates";
+import { addDays, daysBetween, daysInMonth, toMinutes, weekStart } from "../../shared/dates";
 
-/** Mondays of the weeks that cover the month containing `date`. */
+/** First days (Sundays) of the weeks that cover the month containing `date`. */
 export function monthWeeks(date: string): string[] {
   const first = `${date.slice(0, 7)}-01`;
   const last = addDays(first, daysInMonth(Number(date.slice(0, 4)), Number(date.slice(5, 7))) - 1);
   const weeks: string[] = [];
-  for (let monday = addDays(first, -weekday(first)); monday <= last; monday = addDays(monday, 7)) weeks.push(monday);
+  for (let start = weekStart(first); start <= last; start = addDays(start, 7)) weeks.push(start);
   return weeks;
 }
 

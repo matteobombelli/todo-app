@@ -125,7 +125,7 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
         <form className="form" onSubmit={onSubmit}>
           <label className="field">
             <span className="field__label">Title</span>
-            <input autoFocus={!occurrence} maxLength={500} value={form.title} onChange={(e) => set("title", e.target.value)} />
+            <input maxLength={500} value={form.title} onChange={(e) => set("title", e.target.value)} />
           </label>
           <label className="check-field">
             <Checkbox checked={form.all_day} onChange={(v) => set("all_day", v)} />

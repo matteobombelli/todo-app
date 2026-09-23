@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Item, List } from "../../shared/entities";
 import { isOverdue, type Now } from "../../shared/items";
@@ -21,7 +22,9 @@ export function dueLabel(item: Item, today: string): string | null {
  * A checkable item. `list` adds its colour dot, for views that mix lists. `due` picks what the chip
  * shows: the full due date, only the time (views already grouped by day), or nothing.
  * `collapseOnDone` is for views that move completed items elsewhere: the row folds away first, then
- * the item is completed.
+ * the item is completed. `nested` indents a subtask under its parent, and `hidden` folds it away with
+ * its parent's subtasks; `fold` gives a parent the toggle for that. `context` is a short note after the
+ * title (a subtask's parent, where it isn't shown).
  */
 export function ItemRow({
   item,
@@ -29,6 +32,10 @@ export function ItemRow({
   list,
   due = "date",
   collapseOnDone,
+  nested,
+  hidden,
+  fold,
+  context,
   onOpen,
 }: {
   item: Item;
@@ -36,6 +43,10 @@ export function ItemRow({
   list?: List;
   due?: "date" | "time" | "none";
   collapseOnDone?: boolean;
+  nested?: boolean;
+  hidden?: boolean;
+  fold?: { count: number; collapsed: boolean; onToggle: () => void };
+  context?: string;
   onOpen: (item: Item) => void;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
@@ -57,9 +68,13 @@ export function ItemRow({
   }
 
   return (
-    <div ref={wrapper} className={`collapse collapse--delayed${leaving ? " collapse--closed" : ""}`}>
+    <div
+      ref={wrapper}
+      className={`collapse${leaving ? " collapse--delayed collapse--closed" : hidden ? " collapse--closed" : ""}`}
+      inert={hidden}
+    >
       <div className="collapse__inner">
-        <div className={`row item${done || leaving ? " item--done" : ""}`}>
+        <div className={`row item${nested ? " item--subtask" : ""}${done || leaving ? " item--done" : ""}`}>
           <Checkbox
             checked={done || leaving}
             onChange={() => leaving || onToggle()}
@@ -69,7 +84,20 @@ export function ItemRow({
             {list && <span className="dot" style={{ background: paletteVar(list.color) }} aria-hidden="true" />}
             <span className="row__title">{item.title}</span>
             {chip && <span className={`chip${isOverdue(item, now) ? " chip--overdue" : ""}`}>{chip}</span>}
+            {context && <span className="row__meta">{context}</span>}
           </button>
+          {fold && (
+            <button
+              type="button"
+              className="item__fold"
+              aria-expanded={!fold.collapsed}
+              aria-label={fold.collapsed ? `Show ${fold.count} subtasks` : "Hide subtasks"}
+              onClick={fold.onToggle}
+            >
+              {fold.collapsed && <span className="row__meta">{fold.count}</span>}
+              <ChevronRight size={18} className="item__fold-chevron" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
     </div>

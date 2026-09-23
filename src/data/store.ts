@@ -5,11 +5,13 @@ import {
   type Entity,
   type Fields,
   type EntityRecord,
+  type Item,
   type Mutation,
   type MutationResult,
   type SyncResponse,
 } from "../../shared/entities";
 import { newId } from "../../shared/ids";
+import { cascadeToSubtasks } from "../../shared/items";
 
 // Offline-first mirror of the user's records. Every write lands in memory and IndexedDB first, with
 // a mutation queued in the outbox; sync() sends the outbox, then pulls rows past the stored cursor.
@@ -117,7 +119,8 @@ export class DataStore {
     }
     const tables = {} as Record<Entity, Record<string, EntityRecord[Entity]>>;
     for (const e of ENTITIES) {
-      tables[e] = Object.fromEntries((await db.getAll(e)).map((r) => [r.id, r]));
+      // Items cached before subtasks existed have no parent_id.
+      tables[e] = Object.fromEntries((await db.getAll(e)).map((r) => [r.id, e === "items" ? { parent_id: null, ...r } : r]));
     }
     this.set({ tables: tables as Tables, loaded: true, pending: await db.count("outbox") });
   }
@@ -134,50 +137,75 @@ export class DataStore {
   }
 
   async upsert<E extends Entity>(entity: E, input: Fields<E>): Promise<EntityRecord[E]> {
-    // Callers often spread a whole record; only the fields travel.
-    const { created_at: _c, updated_at: _u, seq: _s, deleted_at: _d, ...fields } = input as EntityRecord[E];
-    const existing = this.get(entity, fields.id);
+    return (await this.upsertMany(entity, [input]))[0];
+  }
+
+  /** Several records in one transaction and one render, so a reorder never shows half applied. */
+  async upsertMany<E extends Entity>(entity: E, inputs: Fields<E>[]): Promise<EntityRecord[E][]> {
     const now = Date.now();
-    const record = {
-      ...fields,
-      created_at: existing?.created_at ?? now,
-      updated_at: now,
-      seq: existing?.seq ?? 0,
-      deleted_at: null,
-    } as EntityRecord[E];
+    const writes = inputs.map((input) => {
+      // Callers often spread a whole record; only the fields travel.
+      const { created_at: _c, updated_at: _u, seq: _s, deleted_at: _d, ...fields } = input as EntityRecord[E];
+      const existing = this.get(entity, fields.id);
+      const record = {
+        ...fields,
+        created_at: existing?.created_at ?? now,
+        updated_at: now,
+        seq: existing?.seq ?? 0,
+        deleted_at: null,
+      } as EntityRecord[E];
+      return { fields, record, existing };
+    });
+    // Moving or completing an item carries its subtasks along. The server does the same when it
+    // applies the item's mutation, so only that one is queued.
+    const cascaded =
+      entity === "items"
+        ? writes.flatMap(({ record, existing }) => {
+            // A subtask written by this same call keeps its own new copy.
+            const subtasks = Object.values(this.snapshot.tables.items).filter(
+              (i) => i.parent_id === record.id && !writes.some((w) => w.record.id === i.id),
+            );
+            return cascadeToSubtasks((existing as Item | undefined) ?? null, record as Item, subtasks).map((sub) => ({ ...sub, updated_at: now }));
+          })
+        : [];
     const db = await this.db;
     const tx = db.transaction([entity, "outbox"], "readwrite");
     await Promise.all([
-      tx.objectStore(entity).put(record as never),
-      tx.objectStore("outbox").add({ op_id: newId(), entity, action: "upsert", record: { ...fields } }),
-      tx.done,
-    ]);
-    this.set({ tables: this.patchTables([{ entity, put: record }]), pending: this.snapshot.pending + 1 });
-    this.options.onWrite?.();
-    return record;
-  }
-
-  async remove(entity: Entity, id: string): Promise<void> {
-    const child = CHILDREN[entity];
-    const orphans = child
-      ? Object.values(this.snapshot.tables[child.entity])
-          .filter((r) => (r as unknown as Record<string, unknown>)[child.column] === id)
-          .map((r) => r.id)
-      : [];
-    const db = await this.db;
-    const stores = child ? [entity, child.entity, "outbox" as const] : [entity, "outbox" as const];
-    const tx = db.transaction(stores, "readwrite");
-    await Promise.all([
-      tx.objectStore(entity).delete(id),
-      ...(child ? orphans.map((o) => tx.objectStore(child.entity).delete(o)) : []),
-      tx.objectStore("outbox").add({ op_id: newId(), entity, action: "delete", record: { id } }),
+      ...writes.flatMap(({ fields, record }) => [
+        tx.objectStore(entity).put(record as never),
+        tx.objectStore("outbox").add({ op_id: newId(), entity, action: "upsert", record: { ...fields } }),
+      ]),
+      ...cascaded.map((sub) => tx.objectStore(entity).put(sub as never)),
       tx.done,
     ]);
     this.set({
       tables: this.patchTables([
-        { entity, remove: id },
-        ...(child ? orphans.map((o) => ({ entity: child.entity, remove: o })) : []),
+        ...writes.map(({ record }) => ({ entity, put: record })),
+        ...cascaded.map((sub) => ({ entity: "items" as const, put: sub })),
       ]),
+      pending: this.snapshot.pending + writes.length,
+    });
+    this.options.onWrite?.();
+    return writes.map(({ record }) => record);
+  }
+
+  async remove(entity: Entity, id: string): Promise<void> {
+    const orphans = (CHILDREN[entity] ?? []).flatMap((child) =>
+      Object.values(this.snapshot.tables[child.entity])
+        .filter((r) => (r as unknown as Record<string, unknown>)[child.column] === id)
+        .map((r) => ({ entity: child.entity, id: r.id })),
+    );
+    const db = await this.db;
+    const stores = [...new Set<Entity | "outbox">([entity, ...orphans.map((o) => o.entity), "outbox"])];
+    const tx = db.transaction(stores, "readwrite");
+    await Promise.all([
+      tx.objectStore(entity).delete(id),
+      ...orphans.map((o) => tx.objectStore(o.entity).delete(o.id)),
+      tx.objectStore("outbox").add({ op_id: newId(), entity, action: "delete", record: { id } }),
+      tx.done,
+    ]);
+    this.set({
+      tables: this.patchTables([{ entity, remove: id }, ...orphans.map((o) => ({ entity: o.entity, remove: o.id }))]),
       pending: this.snapshot.pending + 1,
     });
     this.options.onWrite?.();
