@@ -20,7 +20,7 @@ import { compareItems, isOverdue, type Now } from "../../shared/items";
 import type { PaletteKey } from "../../shared/palette";
 import { occurrencesInRange, parseRRule, ruleDates, shiftRRule, type Occurrence } from "../../shared/recurrence";
 import { applyMutation, getRecord, listRecords } from "./records";
-import { StdUnavailableError, fetchStdDates } from "./std";
+import { StdNotConnectedError, StdUnavailableError, fetchStdDates } from "./std";
 
 // Record-level operations for the MCP tools. Writes go through applyMutation, the same path as
 // the app's sync, so seq bumping, validation and cascades behave identically.
@@ -224,11 +224,16 @@ function summarizeExternal(e: ExternalEvent) {
   return { ...e, read_only: true };
 }
 
-async function stdDates(s: Scope, from: string, to: string): Promise<{ events: ExternalEvent[]; unavailable: boolean }> {
+async function stdDates(
+  s: Scope,
+  from: string,
+  to: string,
+): Promise<{ events: ExternalEvent[]; connected: boolean; unavailable: boolean }> {
   try {
-    return { events: await fetchStdDates(s.env, from, to), unavailable: false };
+    return { events: await fetchStdDates(s.env, s.userId, from, to), connected: true, unavailable: false };
   } catch (err) {
-    if (err instanceof StdUnavailableError) return { events: [], unavailable: true };
+    if (err instanceof StdNotConnectedError) return { events: [], connected: false, unavailable: false };
+    if (err instanceof StdUnavailableError) return { events: [], connected: true, unavailable: true };
     throw err;
   }
 }
@@ -246,7 +251,7 @@ export async function listEvents(s: Scope, from: string, to: string) {
   const [occ, std] = await Promise.all([occurrences(s, from, to), stdDates(s, from, to)]);
   return {
     events: occ.map(summarizeOccurrence),
-    save_the_date: std.events.map(summarizeExternal),
+    ...(std.connected ? { save_the_date: std.events.map(summarizeExternal) } : {}),
     ...(std.unavailable ? { save_the_date_unavailable: true } : {}),
   };
 }

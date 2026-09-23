@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "./auth/AuthProvider";
+import { useConfirm } from "./components/ConfirmDialog";
 import { Modal } from "./components/Modal";
 import { store } from "./data/instance";
 
@@ -9,6 +10,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   const navigate = useNavigate();
   const zones = useMemo(() => Intl.supportedValuesOf("timeZone"), []);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
 
   async function onTimezone(tz: string) {
     setError(null);
@@ -21,7 +23,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
   async function onLogout() {
     const { pending } = store.getSnapshot();
-    if (pending > 0 && !confirm(`${pending} change${pending === 1 ? " has" : "s have"} not synced yet and will be lost. Log out anyway?`)) return;
+    const message = `${pending} change${pending === 1 ? " has" : "s have"} not synced yet and will be lost.`;
+    if (pending > 0 && !(await confirm("Log out?", message, "Log out"))) return;
     await logout().catch(() => undefined);
     await store.clear();
     navigate("/login", { replace: true });
@@ -48,6 +51,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </button>
         </div>
       </div>
+      {confirmDialog}
     </Modal>
   );
 }

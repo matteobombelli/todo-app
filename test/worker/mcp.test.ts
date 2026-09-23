@@ -1,6 +1,6 @@
 import { exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { registerAndLogin } from "./helpers";
+import { connectStd, registerAndLogin } from "./helpers";
 
 const ORIGIN = "https://todo.matteob.dev";
 const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
@@ -40,9 +40,13 @@ async function authorizeUrl(clientId: string) {
   return { path: `/authorize?${q}`, verifier };
 }
 
-/** Runs the whole OAuth flow for a fresh user and returns an MCP access token. */
-async function connect(email: string): Promise<string> {
+/**
+ * Runs the whole OAuth flow for a fresh user and returns an MCP access token. The user is also
+ * connected to save-the-date unless `std` is false.
+ */
+async function connect(email: string, std = true): Promise<string> {
   const { cookie } = await registerAndLogin(email);
+  if (std) expect((await connectStd(cookie)).status).toBe(302);
   const clientId = await registerClient();
   const { path, verifier } = await authorizeUrl(clientId);
   const approve = await fetchApp(path, {
@@ -293,11 +297,20 @@ describe("MCP tools", () => {
   });
 
   it("scopes every tool to the token's user", async () => {
-    const stranger = await connect("stranger@example.com");
+    const stranger = await connect("stranger@example.com", false);
     expect((await call(stranger, "list_lists")).data).toEqual([]);
     const { data: lists } = await call(token, "list_lists");
     const milk = (await call(token, "search", { query: "milk" })).data.items[0];
     expect((await call(stranger, "update_item", { id: milk.id, title: "Stolen" })).isError).toBe(true);
     expect((await call(stranger, "delete_list", { list: lists[0].id })).isError).toBe(true);
+  });
+
+  it("leaves save-the-date out for an account that is not connected", async () => {
+    const alone = await connect("unconnected@example.com", false);
+    const listed = (await call(alone, "list_events", { from: "2026-09-14", to: "2026-09-23" })).data;
+    expect(listed).toEqual({ events: [] });
+    const [day] = (await call(alone, "get_agenda", { date: "2026-09-20" })).data.days;
+    expect(day.timed).toEqual([]);
+    expect(day.all_day).toEqual([]);
   });
 });

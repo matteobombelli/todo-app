@@ -1,25 +1,18 @@
-import { ChevronRight, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
-import { paletteVar } from "../components/ColorPicker";
-import { useData, useLists } from "../data/hooks";
+import { Plus } from "lucide-react";
+import { useState } from "react";
+import { Navigate } from "react-router";
+import { useMediaQuery, WIDE } from "../components/motion";
+import { useLists } from "../data/hooks";
 import { ListEditor } from "./ListEditor";
+import { ListRows } from "./ListRows";
 
 export default function ListsPage() {
   const lists = useLists();
-  const { items } = useData().tables;
+  const wide = useMediaQuery(WIDE);
   const [creating, setCreating] = useState(false);
 
-  const counts = useMemo(() => {
-    const out = new Map<string, { open: number; done: number }>();
-    for (const item of Object.values(items)) {
-      const c = out.get(item.list_id) ?? { open: 0, done: 0 };
-      if (item.completed_at === null) c.open++;
-      else c.done++;
-      out.set(item.list_id, c);
-    }
-    return out;
-  }, [items]);
+  // Wide screens list the lists in the sidebar, so this page would only repeat it.
+  if (wide && lists.length > 0) return <Navigate to={`/todo/${lists[0].id}`} replace />;
 
   return (
     <div className="page">
@@ -30,27 +23,7 @@ export default function ListsPage() {
           New list
         </button>
       </div>
-      {lists.length === 0 ? (
-        <p className="empty">No lists yet. Create one to start adding items.</p>
-      ) : (
-        <ul className="rows">
-          {lists.map((list) => {
-            const c = counts.get(list.id) ?? { open: 0, done: 0 };
-            return (
-              <li key={list.id}>
-                <Link to={`/todo/${list.id}`} className="row row--link">
-                  <span className="dot" style={{ background: paletteVar(list.color) }} aria-hidden="true" />
-                  <span className="row__title">{list.name}</span>
-                  <span className="row__meta" aria-label={`${c.open} open, ${c.done} completed`}>
-                    {c.open} / {c.done}
-                  </span>
-                  <ChevronRight size={18} className="row__chevron" aria-hidden="true" />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {lists.length === 0 ? <p className="empty">No lists yet. Create one to start adding items.</p> : <ListRows />}
       {creating && (
         <ListEditor list={null} nextSortOrder={(lists.at(-1)?.sort_order ?? 0) + 1} onClose={() => setCreating(false)} />
       )}

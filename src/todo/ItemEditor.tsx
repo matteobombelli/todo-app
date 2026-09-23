@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { Item } from "../../shared/entities";
-import { Modal } from "../components/Modal";
+import { useConfirm } from "../components/ConfirmDialog";
+import { Modal, useModal } from "../components/Modal";
 import { useLists } from "../data/hooks";
 import { store } from "../data/instance";
 
@@ -11,6 +12,8 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
   const [dueDate, setDueDate] = useState(item.due_date ?? "");
   const [dueTime, setDueTime] = useState(item.due_time ?? "");
   const [listId, setListId] = useState(item.list_id);
+  const [modal, close] = useModal(onClose);
+  const [confirmDialog, confirm] = useConfirm();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -23,17 +26,17 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
       due_time: dueDate && dueTime ? dueTime : null,
       list_id: listId,
     });
-    onClose();
+    close();
   }
 
   async function onDelete() {
-    if (!confirm(`Delete "${item.title}"?`)) return;
+    if (!(await confirm("Delete item?", `"${item.title}" will be deleted.`, "Delete"))) return;
     await store.remove("items", item.id);
-    onClose();
+    close();
   }
 
   return (
-    <Modal open onClose={onClose} title="Edit item">
+    <Modal {...modal} title="Edit item">
       <form className="form" onSubmit={(e) => void onSubmit(e)}>
         <label className="field">
           <span className="field__label">Title</span>
@@ -67,7 +70,7 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
           <button type="button" className="button--danger form__actions-start" onClick={() => void onDelete()}>
             Delete
           </button>
-          <button type="button" className="button--secondary" onClick={onClose}>
+          <button type="button" className="button--secondary" onClick={close}>
             Cancel
           </button>
           <button type="submit" className="button--primary">
@@ -75,6 +78,7 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
           </button>
         </div>
       </form>
+      {confirmDialog}
     </Modal>
   );
 }

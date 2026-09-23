@@ -16,4 +16,10 @@ In claude.ai, add a custom connector with the URL `https://todo.matteob.dev/mcp`
 itself, you log in and approve on the consent page, and it can then use the tools (`get_agenda`,
 `create_event`, `update_item`, ...).
 
+## Connect Save the Date
+
+Save the Date's dates only show for accounts that opted in, and the connection is started there: open
+its Todo app panel (the gear in the top bar), press Connect, approve on the consent page here, and you
+are sent back. The same panel lists connected accounts and disconnects them.
+
 See `CLAUDE.md` for the architecture, bindings, secrets and the sync model.

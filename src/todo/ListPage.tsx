@@ -1,10 +1,11 @@
-import { ArrowLeft, ChevronDown, ChevronRight, Pencil } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
-import { Navigate, useParams } from "react-router";
+import { ArrowLeft, ChevronRight, Pencil } from "lucide-react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
+import { Navigate, useNavigate, useParams } from "react-router";
 import type { Item } from "../../shared/entities";
 import { newId } from "../../shared/ids";
 import { orderItems } from "../../shared/items";
 import { paletteVar } from "../components/ColorPicker";
+import { useShortcuts, useSwipe } from "../components/gestures";
 import { IconButton } from "../components/IconButton";
 import { useData, useNow } from "../data/hooks";
 import { store } from "../data/instance";
@@ -21,6 +22,12 @@ export default function ListPage() {
   const [editing, setEditing] = useState<Item | null>(null);
   const [editingList, setEditingList] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const page = useRef<HTMLDivElement>(null);
+  const addInput = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+
+  useSwipe(page, () => navigate("/todo"), 24);
+  useShortcuts({ n: () => addInput.current?.focus() });
 
   const { open, completed } = useMemo(
     () => orderItems(Object.values(items).filter((i) => i.list_id === listId)),
@@ -46,23 +53,23 @@ export default function ListPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page page--swipe" ref={page}>
       <div className="page__header">
-        <IconButton icon={ArrowLeft} label="All lists" to="/todo" />
+        <IconButton icon={ArrowLeft} label="All lists" to="/todo" nav="pop" className="page__back" />
         <span className="dot dot--lg" style={{ background: paletteVar(list.color) }} aria-hidden="true" />
         <h1 className="page__title">{list.name}</h1>
         <IconButton icon={Pencil} label="Edit list" onClick={() => setEditingList(true)} />
       </div>
 
       <form className="add-row" onSubmit={(e) => void onAdd(e)}>
-        <input placeholder="Add an item" aria-label="New item" maxLength={500} value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <input ref={addInput} placeholder="Add an item" aria-label="New item" maxLength={500} value={draft} onChange={(e) => setDraft(e.target.value)} />
       </form>
 
       {open.length === 0 && completed.length === 0 && <p className="empty">Nothing here yet.</p>}
       <ul className="rows">
         {open.map((item) => (
           <li key={item.id}>
-            <ItemRow item={item} now={now} onOpen={setEditing} />
+            <ItemRow item={item} now={now} collapseOnDone onOpen={setEditing} />
           </li>
         ))}
       </ul>
@@ -70,18 +77,18 @@ export default function ListPage() {
       {completed.length > 0 && (
         <section className="completed">
           <button type="button" className="section-toggle" aria-expanded={showCompleted} onClick={() => setShowCompleted((v) => !v)}>
-            {showCompleted ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+            <ChevronRight size={16} className="section-toggle__chevron" aria-hidden="true" />
             Completed ({completed.length})
           </button>
-          {showCompleted && (
-            <ul className="rows">
+          <div className={`collapse${showCompleted ? "" : " collapse--closed"}`} inert={!showCompleted}>
+            <ul className="rows collapse__inner">
               {completed.map((item) => (
                 <li key={item.id}>
                   <ItemRow item={item} now={now} onOpen={setEditing} />
                 </li>
               ))}
             </ul>
-          )}
+          </div>
         </section>
       )}
 

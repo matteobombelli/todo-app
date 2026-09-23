@@ -1,18 +1,19 @@
 import { ExternalLink } from "lucide-react";
 import type { ExternalEvent } from "../../shared/agenda";
-import { Modal } from "../components/Modal";
+import { Modal, useModal } from "../components/Modal";
 import { formatLongDate, formatTime } from "../format";
-import { STD_APP_URL } from "./data";
+import { STD_APP_URL } from "../../shared/std";
 
 const STATUS_LABELS = { proposed: "Proposed", upcoming: "Upcoming", saved: "Saved" } as const;
 
 export function StdSheet({ event, onClose }: { event: ExternalEvent; onClose: () => void }) {
+  const [modal] = useModal(onClose);
   const dates =
     event.start_date === event.end_date
       ? formatLongDate(event.start_date)
       : `${formatLongDate(event.start_date)} to ${formatLongDate(event.end_date)}`;
   return (
-    <Modal open onClose={onClose} title={event.title}>
+    <Modal {...modal} title={event.title}>
       <dl className="details">
         <dt>When</dt>
         <dd>

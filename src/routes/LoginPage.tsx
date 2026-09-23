@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
+import { Spinner } from "../components/Spinner";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -9,7 +10,7 @@ export default function LoginPage() {
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? "/todo";
   const nextParam = new URLSearchParams(location.search).get("next");
-  const next = nextParam?.startsWith("/authorize?") ? nextParam : null;
+  const next = nextParam?.startsWith("/authorize?") || nextParam?.startsWith("/connect/") ? nextParam : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +23,8 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(email, password);
-      // /authorize (connecting Claude) is served by the Worker, not the SPA, so it needs a real navigation.
+      // /authorize (connecting Claude) and /connect/* (connecting Save the Date) are served by the
+      // Worker, not the SPA, so they need a real navigation.
       if (next) window.location.assign(next);
       else navigate(from, { replace: true });
     } catch (err) {
@@ -55,8 +57,9 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
         {error && <p className="form__error">{error}</p>}
-        <button type="submit" className="button--primary" disabled={busy}>
-          {busy ? "Logging in…" : "Log in"}
+        <button type="submit" className="button--primary button--icon" disabled={busy}>
+          {busy && <Spinner inline />}
+          Log in
         </button>
         <p className="muted">
           No account? <Link to="/signup">Register</Link>

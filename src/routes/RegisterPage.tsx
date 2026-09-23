@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
+import { Spinner } from "../components/Spinner";
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -61,8 +62,9 @@ export default function RegisterPage() {
           onChange={(e) => setInviteCode(e.target.value)}
         />
         {error && <p className="form__error">{error}</p>}
-        <button type="submit" className="button--primary" disabled={busy}>
-          {busy ? "Registering…" : "Register"}
+        <button type="submit" className="button--primary button--icon" disabled={busy}>
+          {busy && <Spinner inline />}
+          Register
         </button>
         <p className="muted">
           Already have an account? <Link to="/login">Log in</Link>

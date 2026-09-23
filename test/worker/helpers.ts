@@ -1,4 +1,5 @@
 import { exports } from "cloudflare:workers";
+import { STD_TEST_CODE } from "../std-mock";
 
 interface TestUser {
   id: string;
@@ -6,7 +7,8 @@ interface TestUser {
   timezone: string;
 }
 
-export const API = "https://todo.matteob.dev/api";
+export const ORIGIN = "https://todo.matteob.dev";
+export const API = `${ORIGIN}/api`;
 
 export function request(path: string, init?: RequestInit): Promise<Response> {
   return exports.default.fetch(new Request(API + path, init));
@@ -55,4 +57,16 @@ export async function registerAndLogin(
   const cookie = sessionCookie(res);
   const { user } = (await res.json()) as { user: TestUser };
   return { cookie, user };
+}
+
+/** Approves the save-the-date consent page as this session, with the mock's always-valid code. */
+export function connectStd(cookie: string, code = STD_TEST_CODE): Promise<Response> {
+  return exports.default.fetch(
+    new Request(`${ORIGIN}/connect/save-the-date?code=${code}`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { Cookie: cookie, Origin: ORIGIN, "Content-Type": "application/x-www-form-urlencoded" },
+      body: "decision=allow",
+    }),
+  );
 }

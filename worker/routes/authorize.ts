@@ -8,11 +8,11 @@ import type { McpProps } from "../mcp";
 
 type OAuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
-function escape(s: string): string {
+export function escape(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-function page(title: string, body: string, status = 200): Response {
+export function page(title: string, body: string, status = 200): Response {
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escape(title)}</title>

@@ -1,13 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { cookieHeader, registerAndLogin, request } from "./helpers";
+import { connectStd, cookieHeader, registerAndLogin, request } from "./helpers";
 
 describe("GET /std/dates", () => {
   it("requires a session", async () => {
     expect((await request("/std/dates?from=2026-09-01&to=2026-09-30")).status).toBe(401);
   });
 
+  it("answers not connected for an account that never connected", async () => {
+    const { cookie } = await registerAndLogin("std0@example.com");
+    const res = await request("/std/dates?from=2026-09-01&to=2026-09-30", { headers: cookieHeader(cookie) });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ connected: false, events: [] });
+  });
+
   it("maps save-the-date rows overlapping the range to read-only events", async () => {
     const { cookie } = await registerAndLogin("std1@example.com");
+    await connectStd(cookie);
     const res = await request("/std/dates?from=2026-09-01&to=2026-09-30", { headers: cookieHeader(cookie) });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -38,6 +46,7 @@ describe("GET /std/dates", () => {
 
   it("includes multi-day entries that started before the range", async () => {
     const { cookie } = await registerAndLogin("std2@example.com");
+    await connectStd(cookie);
     const res = await request("/std/dates?from=2026-09-27&to=2026-10-31", { headers: cookieHeader(cookie) });
     const { events } = (await res.json()) as { events: { id: string }[] };
     expect(events.map((e) => e.id)).toEqual(["std-2"]);

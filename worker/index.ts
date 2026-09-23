@@ -4,6 +4,7 @@ import { json } from "./http";
 import { mcpApiHandler } from "./mcp";
 import { handleAuthorize } from "./routes/authorize";
 import { registerAuthRoutes } from "./routes/auth";
+import { CONNECT_PATH, handleConnect } from "./routes/connect";
 import { registerStdRoutes } from "./routes/std";
 import { registerSyncRoutes } from "./routes/sync";
 import { Router } from "./router";
@@ -24,6 +25,7 @@ const app: ExportedHandler<Env> = {
     const { pathname } = new URL(request.url);
     if (pathname === API_PREFIX || pathname.startsWith(`${API_PREFIX}/`)) return router.handle(request, env, ctx);
     if (pathname === "/authorize") return handleAuthorize(request, env as Parameters<typeof handleAuthorize>[1]);
+    if (pathname === CONNECT_PATH) return handleConnect(request, env);
     return env.ASSETS.fetch(request);
   },
 };

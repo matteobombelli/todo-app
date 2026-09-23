@@ -3,7 +3,8 @@ import type { List } from "../../shared/entities";
 import { newId } from "../../shared/ids";
 import type { PaletteKey } from "../../shared/palette";
 import { ColorPicker } from "../components/ColorPicker";
-import { Modal } from "../components/Modal";
+import { useConfirm } from "../components/ConfirmDialog";
+import { Modal, useModal } from "../components/Modal";
 import { store } from "../data/instance";
 
 /** Creates a list when `list` is null, otherwise renames, recolours or deletes it. */
@@ -18,6 +19,8 @@ export function ListEditor({
 }) {
   const [name, setName] = useState(list?.name ?? "");
   const [color, setColor] = useState<PaletteKey>(list?.color ?? "blue");
+  const [modal, close] = useModal(onClose);
+  const [confirmDialog, confirm] = useConfirm();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,17 +31,17 @@ export function ListEditor({
       color,
       sort_order: list?.sort_order ?? nextSortOrder,
     });
-    onClose();
+    close();
   }
 
   async function onDelete() {
-    if (!list || !confirm(`Delete "${list.name}" and all its items?`)) return;
+    if (!list || !(await confirm("Delete list?", `"${list.name}" and all its items will be deleted.`, "Delete"))) return;
     await store.remove("lists", list.id);
-    onClose();
+    close();
   }
 
   return (
-    <Modal open onClose={onClose} title={list ? "Edit list" : "New list"}>
+    <Modal {...modal} title={list ? "Edit list" : "New list"}>
       <form className="form" onSubmit={(e) => void onSubmit(e)}>
         <label className="field">
           <span className="field__label">Name</span>
@@ -54,7 +57,7 @@ export function ListEditor({
               Delete
             </button>
           )}
-          <button type="button" className="button--secondary" onClick={onClose}>
+          <button type="button" className="button--secondary" onClick={close}>
             Cancel
           </button>
           <button type="submit" className="button--primary">
@@ -62,6 +65,7 @@ export function ListEditor({
           </button>
         </div>
       </form>
+      {confirmDialog}
     </Modal>
   );
 }

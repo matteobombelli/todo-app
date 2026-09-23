@@ -1,10 +1,11 @@
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import type { ExternalEvent } from "../../shared/agenda";
 import { addDays, daysInMonth, isDate, makeDate } from "../../shared/dates";
 import type { Item } from "../../shared/entities";
 import type { Occurrence } from "../../shared/recurrence";
+import { useShortcuts, useSwipe } from "../components/gestures";
 import { IconButton } from "../components/IconButton";
 import { useData, useNow } from "../data/hooks";
 import { formatDayMonth, formatLongDate, formatMonthYear } from "../format";
@@ -44,6 +45,14 @@ function title(view: View, date: string): string {
   return `${formatDayMonth(date)} to ${formatDayMonth(addDays(date, 6))}`;
 }
 
+const SLIDE_CLASSES = { [-1]: "period--from-left", 0: "period--fade", 1: "period--from-right" } as const;
+
+/** One period's content, keyed by the period. The slide direction is fixed at mount, so selecting a day inside it doesn't replay the entrance. */
+function Period({ slide, children }: { slide: 1 | -1 | 0; children: ReactNode }) {
+  const [entrance] = useState(SLIDE_CLASSES[slide]);
+  return <div className={`period ${entrance}`}>{children}</div>;
+}
+
 type Editing =
   | { kind: "event"; occurrence: Occurrence | null }
   | { kind: "item"; item: Item }
@@ -56,6 +65,9 @@ export default function CalendarPage() {
   const rawDate = params.get("date") ?? "";
   const date = isDate(rawDate) ? rawDate : now.date;
   const [editing, setEditing] = useState<Editing | null>(null);
+  // Which way the next period slides in: from the right after "next", from the left after "previous".
+  const [slide, setSlide] = useState<1 | -1 | 0>(0);
+  const swipeArea = useRef<HTMLDivElement>(null);
   const { items, lists } = useData().tables;
   const itemList = useMemo(() => Object.values(items), [items]);
 
@@ -63,10 +75,22 @@ export default function CalendarPage() {
   const occurrences = useOccurrences(from, to);
   const external = useStdDates(from, to);
 
-  const go = (next: { view?: View; date?: string }) =>
+  const go = (next: { view?: View; date?: string }, dir: 1 | -1 | 0 = 0) => {
+    setSlide(dir);
     setParams({ view: next.view ?? view, date: next.date ?? date }, { replace: true });
+  };
   const step = (dir: 1 | -1) =>
-    go({ date: view === "month" ? addMonths(date, dir) : addDays(date, dir * (view === "week" ? 7 : 1)) });
+    go({ date: view === "month" ? addMonths(date, dir) : addDays(date, dir * (view === "week" ? 7 : 1)) }, dir);
+  const newEvent = () => setEditing({ kind: "event", occurrence: null });
+
+  useSwipe(swipeArea, step);
+  useShortcuts({
+    n: newEvent,
+    t: () => go({ date: now.date }),
+    ArrowLeft: () => step(-1),
+    ArrowRight: () => step(1),
+  });
+  const viewIndex = VIEWS.findIndex((v) => v.value === view);
 
   const handlers: CalendarHandlers = {
     onEvent: (occurrence) => setEditing({ kind: "event", occurrence }),
@@ -85,43 +109,51 @@ export default function CalendarPage() {
           </button>
           <IconButton icon={ChevronRight} label="Next" onClick={() => step(1)} />
         </div>
-        <div className="segmented" role="radiogroup" aria-label="View">
+        <div
+          className="segmented"
+          role="radiogroup"
+          aria-label="View"
+          style={{ "--count": VIEWS.length, "--index": viewIndex } as CSSProperties}
+        >
           {VIEWS.map((v) => (
             <button key={v.value} type="button" role="radio" aria-checked={v.value === view} onClick={() => go({ view: v.value })}>
               {v.label}
             </button>
           ))}
         </div>
-        <IconButton icon={Plus} label="New event" onClick={() => setEditing({ kind: "event", occurrence: null })} />
+        <IconButton icon={Plus} label="New event" onClick={newEvent} className="cal-header__add" />
       </div>
 
-      {view === "month" ? (
-        <div className="cal-month">
-          <MonthView
-            selected={date}
-            today={now.date}
-            occurrences={occurrences}
-            external={external}
-            items={itemList}
-            lists={lists}
-            onSelect={(d) => go({ date: d })}
-          />
-          <AgendaPanel date={date} now={now} occurrences={occurrences} external={external} handlers={handlers} />
-        </div>
-      ) : (
-        <TimeGrid
-          key={`${view}:${from}`}
-          start={from}
-          days={view === "week" ? 7 : 1}
-          now={now}
-          occurrences={occurrences}
-          external={external}
-          items={itemList}
-          lists={lists}
-          handlers={handlers}
-          onSelectDate={(d) => go({ view: "day", date: d })}
-        />
-      )}
+      <div className="cal-swipe" ref={swipeArea}>
+        <Period key={`${view}:${from}`} slide={slide}>
+          {view === "month" ? (
+            <div className="cal-month">
+              <MonthView
+                selected={date}
+                today={now.date}
+                occurrences={occurrences}
+                external={external}
+                items={itemList}
+                lists={lists}
+                onSelect={(d) => go({ date: d })}
+              />
+              <AgendaPanel key={date} date={date} now={now} occurrences={occurrences} external={external} handlers={handlers} />
+            </div>
+          ) : (
+            <TimeGrid
+              start={from}
+              days={view === "week" ? 7 : 1}
+              now={now}
+              occurrences={occurrences}
+              external={external}
+              items={itemList}
+              lists={lists}
+              handlers={handlers}
+              onSelectDate={(d) => go({ view: "day", date: d })}
+            />
+          )}
+        </Period>
+      </div>
 
       {editing?.kind === "event" && <EventEditor occurrence={editing.occurrence} date={date} onClose={() => setEditing(null)} />}
       {editing?.kind === "item" && <ItemEditor item={editing.item} onClose={() => setEditing(null)} />}

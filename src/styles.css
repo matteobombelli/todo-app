@@ -17,6 +17,7 @@
   --shadow: 0 1px 3px rgba(20, 20, 40, 0.12);
   --shadow-hover: 0 8px 20px rgba(20, 20, 40, 0.16);
 
+  /* Motion: shared durations, so everything that moves together stays in step. */
   --fast: 160ms;
   --medium: 320ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -50,6 +51,24 @@ body {
   color: var(--fg);
   font: 16px/1.5 "Figtree Variable", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  /* The shell scrolls inside itself; the page itself never bounces or pulls to refresh. */
+  overscroll-behavior: none;
+}
+
+/* App-like touch: no double-tap zoom, text selection or long-press callouts on controls. */
+button,
+a,
+label,
+.tab {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+button,
+.tab,
+.row--link {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 h1 {
@@ -103,7 +122,9 @@ textarea,
   transition:
     border-color var(--fast) var(--ease-out),
     background var(--fast) var(--ease-out),
-    color var(--fast) var(--ease-out);
+    color var(--fast) var(--ease-out),
+    box-shadow var(--fast) var(--ease-out),
+    transform var(--fast) var(--ease-spring);
 }
 
 button,
@@ -115,6 +136,11 @@ button,
 button:hover:not(:disabled),
 .button-link:hover {
   border-color: var(--accent);
+}
+
+button:active:not(:disabled),
+.button-link:active {
+  transform: scale(0.96);
 }
 
 button:disabled {
@@ -143,6 +169,12 @@ button:disabled {
   border-color: var(--danger);
 }
 
+.button--danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--bg);
+}
+
 .button--icon,
 .button-link {
   display: inline-flex;
@@ -165,13 +197,63 @@ button:disabled {
   outline: none;
 }
 
-input[type="checkbox"] {
-  width: 1.25rem;
-  height: 1.25rem;
-  margin: 0;
-  padding: 0;
+/* Checkbox: the native input sits invisibly on top of the drawn box, so it keeps its semantics. */
+.check {
+  position: relative;
+  display: inline-grid;
   flex: none;
-  accent-color: var(--accent);
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.check__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.check__box {
+  display: grid;
+  place-items: center;
+  border: var(--stroke) solid var(--muted);
+  border-radius: 6px;
+  color: var(--bg);
+  transition:
+    background var(--fast) var(--ease-out),
+    border-color var(--fast) var(--ease-out),
+    transform var(--fast) var(--ease-spring);
+}
+
+.check__box svg {
+  transform: scale(0);
+  transition: transform var(--medium) var(--ease-spring);
+}
+
+.check__input:checked + .check__box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.check__input:checked + .check__box svg {
+  transform: scale(1);
+}
+
+.check__input:active + .check__box {
+  transform: scale(0.85);
+}
+
+.check__input:focus-visible + .check__box {
+  outline: var(--stroke) solid var(--accent);
+  outline-offset: 2px;
+}
+
+.item .check__box {
+  border-radius: 50%;
 }
 
 .icon-btn {
@@ -198,8 +280,46 @@ input[type="checkbox"] {
   color: var(--fg);
 }
 
-.icon-btn:active {
-  transform: scale(0.94);
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+/* Tooltip from the label, for pointers that hover. Shows late, hides at once. */
+@media (hover: hover) {
+  .icon-btn {
+    position: relative;
+  }
+
+  .icon-btn::after {
+    content: attr(aria-label);
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    z-index: 5;
+    padding: 0.1rem 0.45rem;
+    border-radius: 6px;
+    background: var(--fg);
+    color: var(--bg);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    translate: -50% -3px;
+    transition:
+      opacity var(--fast) var(--ease-out),
+      translate var(--fast) var(--ease-out);
+  }
+
+  .icon-btn:hover::after {
+    opacity: 1;
+    translate: -50% 0;
+    transition-delay: 400ms;
+  }
+
+  .sidebar__footer .icon-btn::after {
+    top: auto;
+    bottom: calc(100% + 6px);
+  }
 }
 
 .chip {
@@ -265,9 +385,26 @@ input[type="checkbox"] {
   }
 }
 
+.spinner--inline {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  border-color: currentColor;
+  border-top-color: transparent;
+}
+
+/* Keyframes only give the start; use them with `backwards` fill so delays hold the start state. */
 @keyframes fade-in {
   from {
     opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 
@@ -278,13 +415,83 @@ input[type="checkbox"] {
   }
 }
 
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.8);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes from-right {
+  from {
+    opacity: 0;
+    transform: translateX(2.5rem);
+  }
+}
+
+@keyframes from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-2.5rem);
+  }
+}
+
+/* Route transitions (view transitions API): a push slides the new screen in over the old one. */
+@keyframes vt-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes vt-out-left {
+  to {
+    transform: translateX(-30%);
+    opacity: 0.6;
+  }
+}
+
+@keyframes vt-in-left {
+  from {
+    transform: translateX(-30%);
+    opacity: 0.6;
+  }
+}
+
+@keyframes vt-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 /* Shell: header, content, and the tab bar, which sits at the bottom on phones and in the header
-   on wider screens. */
+   on wider screens. From 960px a sidebar replaces the header. */
 
 .shell {
   display: flex;
-  flex-direction: column;
   height: 100dvh;
+  animation: fade-in var(--medium) var(--ease-out);
+}
+
+.shell__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-header {
@@ -316,12 +523,42 @@ input[type="checkbox"] {
   animation: spin 1s linear infinite;
 }
 
+/* The route transitions animate this box alone, so the header and tab bar stay put. It needs its
+   own background: the old and new screens are snapshots laid over each other. */
 .shell__main {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   display: flex;
   flex-direction: column;
+  background: var(--bg);
+  view-transition-name: page;
+}
+
+::view-transition-old(page),
+::view-transition-new(page) {
+  animation-duration: var(--fast);
+}
+
+@media (max-width: 959px) {
+  :root[data-nav="push"]::view-transition-old(page) {
+    animation: vt-out-left var(--medium) var(--ease-out) both;
+  }
+
+  :root[data-nav="push"]::view-transition-new(page) {
+    animation: vt-in-right var(--medium) var(--ease-out) both;
+  }
+
+  :root[data-nav="pop"]::view-transition-old(page) {
+    z-index: 1;
+    animation: vt-out-right var(--medium) var(--ease-out) both;
+  }
+
+  :root[data-nav="pop"]::view-transition-new(page) {
+    animation: vt-in-left var(--medium) var(--ease-out) both;
+  }
 }
 
 .tabs {
@@ -337,10 +574,23 @@ input[type="checkbox"] {
   color: var(--muted);
   text-decoration: none;
   font-weight: 500;
+  transition:
+    color var(--fast) var(--ease-out),
+    background var(--fast) var(--ease-out),
+    box-shadow var(--fast) var(--ease-out),
+    transform var(--fast) var(--ease-spring);
+}
+
+.tab:active {
+  transform: scale(0.94);
 }
 
 .tab.active {
   color: var(--accent);
+}
+
+.tab.active svg {
+  animation: pop var(--medium) var(--ease-spring);
 }
 
 .tabs--top {
@@ -356,9 +606,21 @@ input[type="checkbox"] {
 
 .tabs--bottom .tab {
   flex-direction: column;
-  gap: 0;
+  gap: 0.1rem;
   padding: 0.4rem;
   font-size: 0.75rem;
+}
+
+/* The active tab's icon sits in a pill. */
+.tabs--bottom .tab svg {
+  box-sizing: content-box;
+  padding: 0.2rem 1rem;
+  border-radius: 999px;
+  transition: background var(--medium) var(--ease-out);
+}
+
+.tabs--bottom .tab.active svg {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 @media (min-width: 720px) {
@@ -375,6 +637,92 @@ input[type="checkbox"] {
   .tabs--bottom {
     display: none;
   }
+}
+
+.sidebar {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    gap: 0.25rem;
+    width: 16rem;
+    padding: max(1rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    border-right: var(--stroke) solid var(--border);
+    background: var(--surface);
+  }
+
+  .app-header,
+  .page__back {
+    display: none;
+  }
+}
+
+.sidebar__brand {
+  padding: 0 0.5rem 0.75rem;
+  font-weight: 600;
+}
+
+.tabs--side {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-left: 0.5rem;
+}
+
+.sidebar__heading h2 {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sidebar__lists {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sidebar .row {
+  min-height: 2.25rem;
+}
+
+.sidebar :is(.tab, .row--link):hover,
+.sidebar :is(.tab, .row--link).active {
+  background: var(--bg);
+}
+
+.sidebar :is(.tab, .row--link).active {
+  box-shadow: var(--shadow);
+}
+
+.sidebar__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: var(--stroke) solid var(--border);
+}
+
+.sidebar__user {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0.5rem;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Pages */
@@ -399,6 +747,13 @@ input[type="checkbox"] {
   overflow-wrap: anywhere;
 }
 
+/* Swiped horizontally by useSwipe; vertical pans still scroll. It fills the main area so a swipe
+   below short content still lands on it. */
+.page--swipe {
+  flex: 1;
+  touch-action: pan-y;
+}
+
 /* Rows: lists, items, agenda entries. */
 
 .rows {
@@ -408,6 +763,31 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+/* Rows rise in on mount, the first few staggered. */
+.rows > li {
+  animation: rise-in var(--medium) var(--ease-out) backwards;
+}
+
+.rows > li:nth-child(n + 2) {
+  animation-delay: 25ms;
+}
+
+.rows > li:nth-child(n + 3) {
+  animation-delay: 50ms;
+}
+
+.rows > li:nth-child(n + 4) {
+  animation-delay: 75ms;
+}
+
+.rows > li:nth-child(n + 5) {
+  animation-delay: 100ms;
+}
+
+.rows > li:nth-child(n + 6) {
+  animation-delay: 125ms;
 }
 
 .row {
@@ -422,6 +802,10 @@ input[type="checkbox"] {
   background: transparent;
   color: inherit;
   text-align: left;
+  transition:
+    background var(--fast) var(--ease-out),
+    box-shadow var(--fast) var(--ease-out),
+    transform var(--fast) var(--ease-spring);
 }
 
 .row--link {
@@ -429,6 +813,12 @@ input[type="checkbox"] {
 }
 
 :is(.row--link, button.row):hover {
+  background: var(--surface);
+}
+
+:is(.row--link, button.row):active,
+.item:has(.item__body:active) {
+  transform: scale(0.98);
   background: var(--surface);
 }
 
@@ -461,9 +851,21 @@ input[type="checkbox"] {
   text-align: left;
 }
 
+.item__body:active:not(:disabled) {
+  transform: none;
+}
+
+/* The strike-through fades in rather than snapping on. */
+.item .row__title {
+  text-decoration: line-through transparent;
+  transition:
+    color var(--medium) var(--ease-out),
+    text-decoration-color var(--medium) var(--ease-out);
+}
+
 .item--done .row__title {
   color: var(--muted);
-  text-decoration: line-through;
+  text-decoration-color: currentColor;
 }
 
 .add-row {
@@ -487,6 +889,39 @@ input[type="checkbox"] {
   background: transparent;
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+.section-toggle__chevron {
+  transition: transform var(--medium) var(--ease-out);
+}
+
+.section-toggle[aria-expanded="true"] .section-toggle__chevron {
+  transform: rotate(90deg);
+}
+
+/* Height animation: the single grid row goes from its content's height to nothing. */
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows var(--medium) var(--ease-out),
+    opacity var(--medium) var(--ease-out);
+}
+
+.collapse--closed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+/* A wrapper, so the row's own min-height doesn't floor the track while it expands. */
+.collapse__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Completing an item: let the tick land before the row folds away. */
+.collapse--delayed {
+  transition-delay: 250ms;
 }
 
 /* Forms */
@@ -634,9 +1069,15 @@ input[type="checkbox"] {
   border: var(--stroke) solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  animation: rise-in var(--medium) var(--ease-out);
 }
 
-/* Modal */
+.card--auth .button--icon {
+  justify-content: center;
+}
+
+/* Modal: a centred box; a bottom sheet on phones; a side panel on wide screens unless it's a dialog.
+   Entrances are keyframes, exits are transitions on --closing, which Modal waits out. */
 
 /* The track is capped at the viewport so the modal's max-width resolves against it, not its own width. */
 .modal__backdrop {
@@ -649,11 +1090,18 @@ input[type="checkbox"] {
   background: var(--scrim);
   z-index: 10;
   animation: fade-in var(--medium) var(--ease-out);
+  transition: opacity var(--medium) var(--ease-out);
+}
+
+.modal__backdrop--closing {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .modal {
   display: flex;
   flex-direction: column;
+  width: 30rem;
   max-width: 100%;
   max-height: 100%;
   background: var(--bg);
@@ -661,10 +1109,14 @@ input[type="checkbox"] {
   border-radius: var(--radius);
   box-shadow: var(--shadow-hover);
   animation: modal-in var(--medium) var(--ease-out);
+  transition:
+    transform var(--medium) var(--ease-out),
+    opacity var(--medium) var(--ease-out);
 }
 
-.modal--md {
-  width: 30rem;
+.modal--closing {
+  opacity: 0;
+  transform: scale(0.96);
 }
 
 .modal__header {
@@ -673,6 +1125,67 @@ input[type="checkbox"] {
   gap: 0.5rem;
   padding: 0.5rem 0.6rem 0.5rem 1rem;
   border-bottom: var(--stroke) solid var(--border);
+}
+
+.modal__handle {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  .modal__backdrop {
+    place-items: end stretch;
+    padding: max(1rem, env(safe-area-inset-top)) 0 0;
+  }
+
+  .modal {
+    width: 100%;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-bottom: 0;
+    border-radius: 16px 16px 0 0;
+    animation: sheet-up var(--medium) var(--ease-out);
+  }
+
+  .modal--closing {
+    opacity: 1;
+    transform: translateY(100%);
+  }
+
+  /* Dragged by Modal to dismiss, so the browser must not treat the drag as a scroll. */
+  .modal__header {
+    position: relative;
+    padding-top: 1rem;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .modal__handle {
+    display: block;
+    position: absolute;
+    top: 0.4rem;
+    left: 50%;
+    width: 2.25rem;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: var(--border);
+    translate: -50% 0;
+  }
+}
+
+@media (min-width: 960px) {
+  .modal__backdrop--panel {
+    place-items: stretch end;
+    padding: 0.75rem;
+  }
+
+  .modal--panel {
+    width: 28rem;
+    animation: panel-in var(--medium) var(--ease-out);
+  }
+
+  .modal--panel.modal--closing {
+    transform: translateX(2rem);
+  }
 }
 
 .modal__title {
@@ -692,6 +1205,12 @@ input[type="checkbox"] {
 
 .page--calendar {
   max-width: 72rem;
+}
+
+@media (min-width: 960px) {
+  .page--calendar {
+    max-width: none;
+  }
 }
 
 .page--week,
@@ -715,6 +1234,18 @@ input[type="checkbox"] {
   flex: 1 1 100%;
 }
 
+/* Phones: the add button shares the title's line, the nav and view switcher get the next. */
+@media (max-width: 719px) {
+  .cal-header__title {
+    flex-basis: calc(100% - 3rem);
+    order: -2;
+  }
+
+  .cal-header__add {
+    order: -1;
+  }
+}
+
 .cal-header__nav {
   display: flex;
   align-items: center;
@@ -736,14 +1267,32 @@ input[type="checkbox"] {
   }
 }
 
+/* Equal-width options with one indicator that slides to the chosen one (--index of --count). */
 .segmented {
-  display: inline-flex;
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 2px;
   border: var(--stroke) solid var(--border);
   border-radius: var(--radius);
 }
 
+.segmented::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--count));
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--surface);
+  transform: translateX(calc(var(--index) * 100%));
+  transition: transform var(--medium) var(--ease-spring);
+}
+
 .segmented button {
+  position: relative;
   padding: 0.25rem 0.6rem;
   border: 0;
   border-radius: calc(var(--radius) - 3px);
@@ -753,8 +1302,32 @@ input[type="checkbox"] {
 }
 
 .segmented button[aria-checked="true"] {
-  background: var(--surface);
   color: var(--fg);
+}
+
+/* Swiped by useSwipe. Each period (month, week, day) enters from the side it came from. */
+.cal-swipe,
+.period {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.cal-swipe {
+  touch-action: pan-y;
+}
+
+.period--fade {
+  animation: fade-in var(--medium) var(--ease-out);
+}
+
+.period--from-right {
+  animation: from-right var(--medium) var(--ease-out);
+}
+
+.period--from-left {
+  animation: from-left var(--medium) var(--ease-out);
 }
 
 .cal-month {
@@ -809,6 +1382,10 @@ input[type="checkbox"] {
   background: var(--surface);
 }
 
+.month__day[aria-selected="true"] .month__num {
+  animation: pop var(--medium) var(--ease-spring);
+}
+
 .month__day[aria-selected="true"] {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
@@ -843,8 +1420,6 @@ input[type="checkbox"] {
 }
 
 .month__plus {
-  font-size: 0.6rem;
-  line-height: 1;
   color: var(--muted);
 }
 
@@ -1101,14 +1676,29 @@ input[type="checkbox"] {
   box-shadow: var(--shadow-hover);
   transform: translateX(-50%);
   white-space: nowrap;
-  animation: fade-in var(--medium) var(--ease-out);
+  animation: toast-in var(--medium) var(--ease-spring);
 }
 
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 1rem);
+  }
+}
+
+/* Transitions shrink to near zero rather than off, so code waiting on transitionend or
+   transitionMs() still proceeds. */
 @media (prefers-reduced-motion: reduce) {
   *:not(.spinner),
   *::before,
   *::after {
     animation: none !important;
     transition-duration: 0.01ms !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

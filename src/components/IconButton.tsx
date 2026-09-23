@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { MouseEvent } from "react";
 import { Link } from "react-router";
+import { setNavDirection } from "./motion";
 
 export interface IconButtonProps {
   icon: LucideIcon;
@@ -8,6 +9,8 @@ export interface IconButtonProps {
   onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
   /** Renders a router link instead of a button. */
   to?: string;
+  /** For links: which way the route transition slides. */
+  nav?: "push" | "pop";
   danger?: boolean;
   active?: boolean;
   disabled?: boolean;
@@ -17,14 +20,14 @@ export interface IconButtonProps {
   ariaExpanded?: boolean;
 }
 
-export function IconButton({ icon: Icon, label, onClick, to, danger, active, disabled, className, type = "button", ariaHasPopup, ariaExpanded }: IconButtonProps) {
+export function IconButton({ icon: Icon, label, onClick, to, nav, danger, active, disabled, className, type = "button", ariaHasPopup, ariaExpanded }: IconButtonProps) {
   const classes = ["icon-btn", danger && "icon-btn--danger", active && "icon-btn--active", className]
     .filter(Boolean)
     .join(" ");
   const icon = <Icon size={18} strokeWidth={1.75} aria-hidden="true" />;
   if (to) {
     return (
-      <Link to={to} className={classes} aria-label={label}>
+      <Link to={to} className={classes} aria-label={label} viewTransition={!!nav} onClick={nav && (() => setNavDirection(nav))}>
         {icon}
       </Link>
     );

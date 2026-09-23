@@ -5,8 +5,6 @@ import { api } from "../api/client";
 import { useData } from "../data/hooks";
 import { store } from "../data/instance";
 
-export const STD_APP_URL = "https://apps.matteob.dev/projects/savethedate/";
-
 export function useOccurrences(from: string, to: string): Occurrence[] {
   const { events, event_exceptions } = useData().tables;
   return useMemo(

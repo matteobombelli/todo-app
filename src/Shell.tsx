@@ -1,12 +1,15 @@
-import { CalendarDays, CloudOff, ListTodo, RefreshCw, Settings, TriangleAlert } from "lucide-react";
+import { CalendarDays, CloudOff, ListTodo, Plus, RefreshCw, Settings, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { useAuth } from "./auth/AuthProvider";
 import { IconButton } from "./components/IconButton";
+import { setNavDirection } from "./components/motion";
 import { Spinner } from "./components/Spinner";
-import { useData } from "./data/hooks";
+import { useData, useLists } from "./data/hooks";
 import { startSyncLoop, store } from "./data/instance";
 import { SettingsModal } from "./SettingsModal";
+import { ListEditor } from "./todo/ListEditor";
+import { ListRows } from "./todo/ListRows";
 
 function SyncIndicator() {
   const { status, pending } = useData();
@@ -30,15 +33,43 @@ function SyncIndicator() {
 function Tabs({ className }: { className: string }) {
   return (
     <nav className={className} aria-label="Sections">
-      <NavLink to="/todo" className="tab">
+      <NavLink to="/todo" className="tab" viewTransition onClick={() => setNavDirection("tab")}>
         <ListTodo size={20} aria-hidden="true" />
         <span>Todo</span>
       </NavLink>
-      <NavLink to="/calendar" className="tab">
+      <NavLink to="/calendar" className="tab" viewTransition onClick={() => setNavDirection("tab")}>
         <CalendarDays size={20} aria-hidden="true" />
         <span>Calendar</span>
       </NavLink>
     </nav>
+  );
+}
+
+/** Wide screens only: the tabs, every list, and sync status and settings at the bottom. */
+function Sidebar({ onSettings }: { onSettings: () => void }) {
+  const { user } = useAuth();
+  const lists = useLists();
+  const [creating, setCreating] = useState(false);
+  return (
+    <aside className="sidebar">
+      <span className="sidebar__brand">Todo</span>
+      <Tabs className="tabs tabs--side" />
+      <div className="sidebar__heading">
+        <h2>Lists</h2>
+        <IconButton icon={Plus} label="New list" onClick={() => setCreating(true)} />
+      </div>
+      <div className="sidebar__lists">
+        <ListRows compact />
+      </div>
+      <div className="sidebar__footer">
+        <span className="sidebar__user">{user?.email}</span>
+        <SyncIndicator />
+        <IconButton icon={Settings} label="Settings" onClick={onSettings} />
+      </div>
+      {creating && (
+        <ListEditor list={null} nextSortOrder={(lists.at(-1)?.sort_order ?? 0) + 1} onClose={() => setCreating(false)} />
+      )}
+    </aside>
   );
 }
 
@@ -48,6 +79,13 @@ export default function Shell() {
   const { loaded } = useData();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const userId = user!.id;
+
+  // Back and forward buttons replay a route's view transition; they should slide the way back does.
+  useEffect(() => {
+    const onPop = () => setNavDirection("pop");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     let stop: (() => void) | undefined;
@@ -63,16 +101,19 @@ export default function Shell() {
 
   return (
     <div className="shell">
-      <header className="app-header">
-        <span className="app-header__brand">Todo</span>
-        <Tabs className="tabs tabs--top" />
-        <div className="app-header__end">
-          <SyncIndicator />
-          <IconButton icon={Settings} label="Settings" onClick={() => setSettingsOpen(true)} />
-        </div>
-      </header>
-      <main className="shell__main">{loaded ? <Outlet /> : <Spinner />}</main>
-      <Tabs className="tabs tabs--bottom" />
+      {loaded && <Sidebar onSettings={() => setSettingsOpen(true)} />}
+      <div className="shell__content">
+        <header className="app-header">
+          <span className="app-header__brand">Todo</span>
+          <Tabs className="tabs tabs--top" />
+          <div className="app-header__end">
+            <SyncIndicator />
+            <IconButton icon={Settings} label="Settings" onClick={() => setSettingsOpen(true)} />
+          </div>
+        </header>
+        <main className="shell__main">{loaded ? <Outlet /> : <Spinner />}</main>
+        <Tabs className="tabs tabs--bottom" />
+      </div>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );

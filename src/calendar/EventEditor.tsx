@@ -3,7 +3,9 @@ import { addDays, daysBetween, isDate, weekday } from "../../shared/dates";
 import type { PaletteKey } from "../../shared/palette";
 import { WEEKDAY_CODES, type Occurrence } from "../../shared/recurrence";
 import { ColorPicker } from "../components/ColorPicker";
-import { Modal } from "../components/Modal";
+import { Checkbox } from "../components/Checkbox";
+import { useConfirm } from "../components/ConfirmDialog";
+import { Modal, useModal } from "../components/Modal";
 import { store } from "../data/instance";
 import {
   deleteEvent,
@@ -48,18 +50,23 @@ function initialForm(occurrence: Occurrence | null, date: string): EventForm {
 }
 
 function ScopeDialog({ verb, onPick, onClose }: { verb: string; onPick: (s: Scope) => void; onClose: () => void }) {
+  const [modal, close] = useModal(onClose);
+  const pick = (scope: Scope) => {
+    close();
+    onPick(scope);
+  };
   return (
-    <Modal open onClose={onClose} title={`${verb} recurring event`}>
+    <Modal {...modal} variant="dialog" title={`${verb} recurring event`}>
       <div className="form">
         <p className="muted">Apply to this event only, or to every event in the series?</p>
         <div className="form__actions">
-          <button type="button" className="button--secondary" onClick={onClose}>
+          <button type="button" className="button--secondary" onClick={close}>
             Cancel
           </button>
-          <button type="button" onClick={() => onPick("occurrence")}>
+          <button type="button" onClick={() => pick("occurrence")}>
             This event
           </button>
-          <button type="button" className="button--primary" onClick={() => onPick("series")}>
+          <button type="button" className="button--primary" onClick={() => pick("series")}>
             All events
           </button>
         </div>
@@ -74,6 +81,8 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState<"save" | "delete" | null>(null);
   const seriesRule = occurrence ? (store.get("events", occurrence.event_id)?.rrule ?? null) : null;
+  const [modal, close] = useModal(onClose);
+  const [confirmDialog, confirm] = useConfirm();
 
   const set = <K extends keyof EventForm>(key: K, value: EventForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const setRepeat = (patch: Partial<RepeatForm>) => setForm((f) => ({ ...f, repeat: { ...f.repeat, ...patch } }));
@@ -88,10 +97,9 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
   }
 
   async function run(action: "save" | "delete", scope: Scope) {
-    setAsking(null);
     if (action === "save") await saveEvent(form, occurrence, scope);
     else if (occurrence) await deleteEvent(occurrence, scope);
-    onClose();
+    close();
   }
 
   function onSubmit(e: FormEvent) {
@@ -104,23 +112,23 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
     else void run("save", "series");
   }
 
-  function onDelete() {
+  async function onDelete() {
     if (!occurrence) return;
     if (occurrence.recurring) setAsking("delete");
-    else if (confirm(`Delete "${occurrence.title}"?`)) void run("delete", "series");
+    else if (await confirm("Delete event?", `"${occurrence.title}" will be deleted.`, "Delete")) await run("delete", "series");
   }
 
   const { repeat } = form;
   return (
     <>
-      <Modal open onClose={onClose} title={occurrence ? "Edit event" : "New event"}>
+      <Modal {...modal} title={occurrence ? "Edit event" : "New event"}>
         <form className="form" onSubmit={onSubmit}>
           <label className="field">
             <span className="field__label">Title</span>
             <input autoFocus={!occurrence} maxLength={500} value={form.title} onChange={(e) => set("title", e.target.value)} />
           </label>
           <label className="check-field">
-            <input type="checkbox" checked={form.all_day} onChange={(e) => set("all_day", e.target.checked)} />
+            <Checkbox checked={form.all_day} onChange={(v) => set("all_day", v)} />
             All day
           </label>
           <div className="field-row">
@@ -240,11 +248,11 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
           {error && <p className="form__error">{error}</p>}
           <div className="form__actions">
             {occurrence && (
-              <button type="button" className="button--danger form__actions-start" onClick={onDelete}>
+              <button type="button" className="button--danger form__actions-start" onClick={() => void onDelete()}>
                 Delete
               </button>
             )}
-            <button type="button" className="button--secondary" onClick={onClose}>
+            <button type="button" className="button--secondary" onClick={close}>
               Cancel
             </button>
             <button type="submit" className="button--primary">
@@ -260,6 +268,7 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
           onClose={() => setAsking(null)}
         />
       )}
+      {confirmDialog}
     </>
   );
 }

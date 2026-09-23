@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import type { ExternalEvent } from "../../shared/agenda";
 import { addDays } from "../../shared/dates";
@@ -108,7 +109,7 @@ export function MonthView({
                       {dots.slice(0, MAX_DOTS).map((c, j) => (
                         <span key={j} className="dot dot--sm" style={{ background: paletteVar(c) }} />
                       ))}
-                      {dots.length > MAX_DOTS && <span className="month__plus">+</span>}
+                      {dots.length > MAX_DOTS && <Plus size={8} strokeWidth={3} className="month__plus" />}
                     </span>
                   )}
                   {hidden > 0 && <span className="month__more">+{hidden}</span>}

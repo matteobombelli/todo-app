@@ -25,7 +25,7 @@ const RRule = z
 const TIME_NOTE =
   "Dates and times are floating local wall-clock values in the user's timezone (get_agenda reports it and today's date).";
 const STD_NOTE =
-  'Entries with source "save-the-date" come from the separate Save the Date app and are read-only: they cannot be edited or deleted here.';
+  'When the account is connected to save-the-date, entries with source "save-the-date" come from that separate app and are read-only: they cannot be edited or deleted here.';
 
 type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
 

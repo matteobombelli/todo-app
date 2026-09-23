@@ -27,7 +27,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallback: "/index.html",
         // Worker-owned paths: the API, MCP and the OAuth endpoints must always reach the network.
-        navigateFallbackDenylist: [/^\/api\//, /^\/mcp/, /^\/authorize/, /^\/token/, /^\/register/, /^\/\.well-known\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/mcp/, /^\/authorize/, /^\/connect\//, /^\/token/, /^\/register/, /^\/\.well-known\//],
         cleanupOutdatedCaches: true,
       },
     }),

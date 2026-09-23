@@ -24,8 +24,9 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
   tokens).
 - `STD`: service binding to the `save-the-date` Worker.
 - `REGISTRATION_SECRET`: the invite code `POST /api/auth/register` requires.
-- `STD_TOKEN`: bearer token for save-the-date's `GET /api/dates`; the same value is save-the-date's
-  `TODO_APP_TOKEN` secret, which grants that one request and nothing else.
+- `STD_TOKEN`: bearer token for save-the-date's `POST /api/todo/redeem` and `GET /api/dates` (the
+  latter on behalf of a connected account, named in `X-Todo-User`); the same value is save-the-date's
+  `TODO_APP_TOKEN` secret, which grants those two requests and nothing else.
 - Local values live in `.dev.vars` (gitignored).
 
 ## Layout
@@ -33,9 +34,11 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 - `shared/`: code used by the client, the API and MCP. `entities.ts` is the wire format for synced
   records and mutations (zod), `recurrence.ts` the RRULE subset and occurrence expansion, `agenda.ts`
   a day's ordered agenda (the calendar UI and `get_agenda` both use it), `items.ts` item ordering and
-  overdue, `dates.ts` floating date arithmetic, `palette.ts` the only colour values.
+  overdue, `dates.ts` floating date arithmetic, `palette.ts` the only colour values, `std.ts` the
+  save-the-date app URL.
 - `worker/`: `index.ts` wraps everything in `OAuthProvider`; `/api/*` goes to the hand-written
-  `Router`, `/authorize` to `routes/authorize.ts`, other paths to the assets. `services/records.ts` is
+  `Router`, `/authorize` to `routes/authorize.ts`, `/connect/save-the-date` to `routes/connect.ts`,
+  other paths to the assets. `services/records.ts` is
   the single write path; `services/todo.ts` holds the MCP operations; `mcp.ts` registers the tools.
 - `src/`: the SPA. `data/store.ts` is the offline mirror; `todo/` and `calendar/` are the two tabs.
 
@@ -68,5 +71,12 @@ Settings) only for MCP's notion of today and overdue.
 - `/register` is the OAuth dynamic client registration endpoint; the SPA's sign-up page is `/signup`.
 - The service worker must never answer Worker-owned paths: keep `navigateFallbackDenylist` in
   `vite.config.ts` in step with `assets.run_worker_first` in `wrangler.jsonc`.
-- Save-the-date is read-only here. Its entries arrive through `GET /api/std/dates`, which maps its rows
-  to `ExternalEvent`; the client caches each fetched range in IndexedDB (`std_cache`) for offline use.
+- Save-the-date is read-only here and opt-in per account, and save-the-date keeps the list of
+  connected accounts. Connecting starts from its Todo app panel, which mints a one-time code and
+  sends the browser to `/connect/save-the-date?code=…`, a server-rendered consent page like
+  `/authorize`; approving redeems the code over the `STD` binding and redirects back to save-the-date.
+  There is no todo-app UI or schema for this.
+- Save-the-date entries arrive through `GET /api/std/dates`, which maps its rows to `ExternalEvent`
+  and answers `{ connected: false, events: [] }` for an account that has not connected (MCP then
+  leaves `save_the_date` out of `list_events`); the client caches each fetched range in IndexedDB
+  (`std_cache`) for offline use.
