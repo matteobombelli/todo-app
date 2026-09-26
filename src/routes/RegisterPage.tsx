@@ -8,7 +8,7 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? "/todo";
+  const from = (location.state as { from?: string } | null)?.from ?? "/calendar";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -8,7 +8,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? "/todo";
+  const from = (location.state as { from?: string } | null)?.from ?? "/calendar";
   const nextParam = new URLSearchParams(location.search).get("next");
   const next = nextParam?.startsWith("/authorize?") || nextParam?.startsWith("/connect/") ? nextParam : null;
 

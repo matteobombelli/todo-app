@@ -26,7 +26,7 @@ const router = createBrowserRouter([
     path: "/",
     element: <App />,
     children: [
-      { index: true, element: <Navigate to="/todo" replace /> },
+      { index: true, element: <Navigate to="/calendar" replace /> },
       { path: "login", element: <LoginPage /> },
       { path: "signup", element: <RegisterPage /> },
       {
