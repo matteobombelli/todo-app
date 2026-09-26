@@ -1150,12 +1150,14 @@ button:disabled {
 /* Modal: a centred box; a bottom sheet on phones; a side panel on wide screens unless it's a dialog.
    Entrances are keyframes, exits are transitions on --closing, which Modal waits out. */
 
-/* The track is capped at the viewport so the modal's max-width resolves against it, not its own width. */
+/* The tracks are capped at the viewport so the modal's max-width and max-height resolve against them,
+   not its own size; without the row cap a tall modal outgrows the screen and its body never scrolls. */
 .modal__backdrop {
   position: fixed;
   inset: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
   padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
   background: var(--scrim);
