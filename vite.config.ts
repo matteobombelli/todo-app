@@ -29,6 +29,7 @@ export default defineConfig({
         // Worker-owned paths: the API, MCP and the OAuth endpoints must always reach the network.
         navigateFallbackDenylist: [/^\/api\//, /^\/mcp/, /^\/authorize/, /^\/connect\//, /^\/token/, /^\/register/, /^\/\.well-known\//],
         cleanupOutdatedCaches: true,
+        importScripts: ["/push-sw.js"],
       },
     }),
   ],

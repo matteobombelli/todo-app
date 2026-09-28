@@ -27,6 +27,8 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 - `STD_TOKEN`: bearer token for save-the-date's `POST /api/todo/redeem` and `GET /api/dates` (the
   latter on behalf of a connected account, named in `X-Todo-User`); the same value is save-the-date's
   `TODO_APP_TOKEN` secret, which grants those two requests and nothing else.
+- `VAPID_PRIVATE_KEY`: signs Web Push requests; pairs with `vars.VAPID_PUBLIC_KEY` in `wrangler.jsonc`.
+  `node scripts/generate-vapid.mjs` makes a new pair (which invalidates every push subscription).
 - Local values live in `.dev.vars` (gitignored).
 
 ## Layout
@@ -39,8 +41,11 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 - `worker/`: `index.ts` wraps everything in `OAuthProvider`; `/api/*` goes to the hand-written
   `Router`, `/authorize` to `routes/authorize.ts`, `/connect/save-the-date` to `routes/connect.ts`,
   other paths to the assets. `services/records.ts` is
-  the single write path; `services/todo.ts` holds the MCP operations; `mcp.ts` registers the tools.
-- `src/`: the SPA. `data/store.ts` is the offline mirror; `todo/` and `calendar/` are the two tabs.
+  the single write path; `services/todo.ts` holds the MCP operations; `mcp.ts` registers the tools;
+  `services/push.ts` the reminders the `scheduled` handler sends.
+- `src/`: the SPA. `data/store.ts` is the offline mirror; `todo/` and `calendar/` are the two tabs;
+  `push.ts` subscribes the browser to reminders. `public/push-sw.js` is imported into the generated
+  service worker to show them.
 
 ## Sync model
 
@@ -67,7 +72,17 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 
 Dates (`YYYY-MM-DD`) and times (`HH:MM`) are floating, with no zone. The app reads "today" from the
 device clock. The server uses the user's `timezone` setting (default `America/Los_Angeles`, changed in
-Settings) only for MCP's notion of today and overdue.
+Settings) only for MCP's notion of today and overdue, and to time reminders.
+
+## Reminders
+
+- Web Push, opt-in per browser from Settings (`push_subscriptions`, keyed by endpoint). On iOS the app
+  must be on the Home Screen first. Logging out unsubscribes the browser.
+- A cron trigger runs every minute. Open items with a `due_time` notify at that time; timed event
+  occurrences notify `users.event_reminder_minutes` early (the Settings choices are
+  `EVENT_REMINDER_MINUTES` in `shared/api.ts`). Anything due in the last five minutes is sent, so a late
+  run still catches up; `push_sent` keys include the target time, so each reminder goes out once and a
+  rescheduled one goes out again. A push service answering 404 or 410 deletes the subscription.
 
 ## Gotchas
 

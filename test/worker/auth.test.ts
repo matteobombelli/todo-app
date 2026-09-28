@@ -30,7 +30,7 @@ describe("POST /auth/register", () => {
     const { user } = (await res.json()) as { user: { id: string; email: string; timezone: string } };
     expect(user.email).toBe("new@example.com");
     expect(user.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(Object.keys(user).sort()).toEqual(["email", "id", "timezone"]);
+    expect(Object.keys(user).sort()).toEqual(["email", "event_reminder_minutes", "id", "timezone"]);
 
     const cookies = setCookies(res);
     expect(cookies).toHaveLength(1);
@@ -248,5 +248,20 @@ describe("PATCH /settings", () => {
     const { cookie } = await registerAndLogin(uniqueEmail());
     const res = await jsonRequest("/settings", "PATCH", { timezone: "Mars/Olympus" }, cookie);
     expect(res.status).toBe(400);
+  });
+
+  it("updates the event reminder time and leaves the timezone alone", async () => {
+    const { cookie, user } = await registerAndLogin(uniqueEmail());
+    expect(user).toMatchObject({ event_reminder_minutes: 0 });
+    const res = await jsonRequest("/settings", "PATCH", { event_reminder_minutes: 15 }, cookie);
+    expect(await res.json()).toEqual({ user: { ...user, event_reminder_minutes: 15 } });
+    const me = (await (await request("/auth/me", { headers: cookieHeader(cookie) })).json()) as { user: unknown };
+    expect(me.user).toEqual({ ...user, event_reminder_minutes: 15 });
+  });
+
+  it("rejects an unsupported reminder time and an empty patch", async () => {
+    const { cookie } = await registerAndLogin(uniqueEmail());
+    expect((await jsonRequest("/settings", "PATCH", { event_reminder_minutes: 7 }, cookie)).status).toBe(400);
+    expect((await jsonRequest("/settings", "PATCH", {}, cookie)).status).toBe(400);
   });
 });

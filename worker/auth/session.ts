@@ -15,6 +15,7 @@ interface SessionRow {
   user_id: string;
   email: string;
   timezone: string;
+  event_reminder_minutes: number;
 }
 
 /** sessions.id for a raw cookie token: hex sha256. */
@@ -47,7 +48,7 @@ export async function sessionUser(req: Request, db: D1Database): Promise<(User &
   const id = await hashToken(token);
   const row = await db
     .prepare(
-      "SELECT s.expires_at, s.user_id, u.email, u.timezone FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
+      "SELECT s.expires_at, s.user_id, u.email, u.timezone, u.event_reminder_minutes FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
     )
     .bind(id)
     .first<SessionRow>();
@@ -56,7 +57,14 @@ export async function sessionUser(req: Request, db: D1Database): Promise<(User &
     await db.prepare("DELETE FROM sessions WHERE id = ?").bind(id).run().catch(() => undefined);
     return null;
   }
-  return { id: row.user_id, email: row.email, timezone: row.timezone, expiresAt: row.expires_at, sessionId: id };
+  return {
+    id: row.user_id,
+    email: row.email,
+    timezone: row.timezone,
+    event_reminder_minutes: row.event_reminder_minutes,
+    expiresAt: row.expires_at,
+    sessionId: id,
+  };
 }
 
 export async function requireUser(c: Ctx): Promise<User> {
@@ -67,7 +75,7 @@ export async function requireUser(c: Ctx): Promise<User> {
     await c.env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").bind(t + SESSION_TTL_MS, session.sessionId).run();
     appendSessionCookie(c, readCookie(c.req, SESSION_COOKIE)!, SESSION_TTL_MS / 1000);
   }
-  return { id: session.id, email: session.email, timezone: session.timezone };
+  return { id: session.id, email: session.email, timezone: session.timezone, event_reminder_minutes: session.event_reminder_minutes };
 }
 
 export async function destroySession(c: Ctx): Promise<void> {

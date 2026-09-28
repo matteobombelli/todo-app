@@ -26,5 +26,9 @@
     { "binding": "OAUTH_KV", "id": "2dde16142bc94d5588610241d96f771a" }
   ],
   "services": [{ "binding": "STD", "service": "save-the-date" }],
+  // Pairs with the VAPID_PRIVATE_KEY secret; see scripts/generate-vapid.mjs.
+  "vars": { "VAPID_PUBLIC_KEY": "BNraeSFqVKV_XyGwqHULwPEBpAxXZD25Nqjq3CgFOmsgiMQ5Z1Sm-R3XXT88gQAf9WmZA-WXInJU2bEmBCcCViA" },
+  // Sends due reminders (worker/services/push.ts).
+  "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true }
 }

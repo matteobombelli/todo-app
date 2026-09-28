@@ -9,6 +9,7 @@ interface UserRow {
   id: string;
   email: string;
   timezone: string;
+  event_reminder_minutes: number;
   password_hash: string;
 }
 
@@ -18,7 +19,7 @@ export function registerAuthRoutes(r: Router): void {
     if (body.inviteCode !== c.env.REGISTRATION_SECRET) throw new HttpError(403, "Invalid invite code");
     const existing = await c.env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(body.email).first();
     if (existing) throw new HttpError(409, "Email already registered");
-    const user: User = { id: newId(), email: body.email, timezone: DEFAULT_TIMEZONE };
+    const user: User = { id: newId(), email: body.email, timezone: DEFAULT_TIMEZONE, event_reminder_minutes: 0 };
     try {
       await c.env.DB.batch([
         c.env.DB.prepare("INSERT INTO users (id, email, password_hash, timezone, created_at) VALUES (?, ?, ?, ?, ?)").bind(
@@ -41,13 +42,15 @@ export function registerAuthRoutes(r: Router): void {
 
   r.post("/auth/login", async (c) => {
     const body = await parseJson(c.req, LoginBody);
-    const row = await c.env.DB.prepare("SELECT id, email, timezone, password_hash FROM users WHERE email = ?")
+    const row = await c.env.DB.prepare("SELECT id, email, timezone, event_reminder_minutes, password_hash FROM users WHERE email = ?")
       .bind(body.email)
       .first<UserRow>();
     const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
     if (!row || !ok) throw new HttpError(401, "Invalid email or password");
     await createSession(c, row.id);
-    return json({ user: { id: row.id, email: row.email, timezone: row.timezone } satisfies User });
+    return json({
+      user: { id: row.id, email: row.email, timezone: row.timezone, event_reminder_minutes: row.event_reminder_minutes } satisfies User,
+    });
   });
 
   r.post("/auth/logout", async (c) => {
@@ -64,7 +67,13 @@ export function registerAuthRoutes(r: Router): void {
   r.patch("/settings", async (c) => {
     const user = await requireUser(c);
     const body = await parseJson(c.req, SettingsBody);
-    await c.env.DB.prepare("UPDATE users SET timezone = ? WHERE id = ?").bind(body.timezone, user.id).run();
-    return json({ user: { ...user, timezone: body.timezone } satisfies User });
+    // Each field only when sent, so patches from two devices don't undo each other.
+    const row = await c.env.DB.prepare(
+      `UPDATE users SET timezone = COALESCE(?, timezone), event_reminder_minutes = COALESCE(?, event_reminder_minutes)
+       WHERE id = ? RETURNING timezone, event_reminder_minutes`,
+    )
+      .bind(body.timezone ?? null, body.event_reminder_minutes ?? null, user.id)
+      .first<Pick<User, "timezone" | "event_reminder_minutes">>();
+    return json({ user: { ...user, ...row } satisfies User });
   });
 }

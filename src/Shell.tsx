@@ -7,6 +7,7 @@ import { setNavDirection } from "./components/motion";
 import { Spinner } from "./components/Spinner";
 import { useData, useLists } from "./data/hooks";
 import { startSyncLoop, store } from "./data/instance";
+import { refreshPush } from "./push";
 import { SettingsModal } from "./SettingsModal";
 import { ListEditor } from "./todo/ListEditor";
 import { ListRows } from "./todo/ListRows";
@@ -97,6 +98,10 @@ export default function Shell() {
       cancelled = true;
       stop?.();
     };
+  }, [userId]);
+
+  useEffect(() => {
+    refreshPush().catch(() => undefined);
   }, [userId]);
 
   return (

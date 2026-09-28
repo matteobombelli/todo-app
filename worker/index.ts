@@ -4,10 +4,12 @@ import { json } from "./http";
 import { mcpApiHandler } from "./mcp";
 import { handleAuthorize } from "./routes/authorize";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerPushRoutes } from "./routes/push";
 import { CONNECT_PATH, handleConnect } from "./routes/connect";
 import { registerStdRoutes } from "./routes/std";
 import { registerSyncRoutes } from "./routes/sync";
 import { Router } from "./router";
+import { sendReminders } from "./services/push";
 
 const router = new Router();
 
@@ -19,6 +21,7 @@ router.get("/health", async (c) => {
 registerAuthRoutes(router);
 registerSyncRoutes(router);
 registerStdRoutes(router);
+registerPushRoutes(router);
 
 const app: ExportedHandler<Env> = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -32,7 +35,7 @@ const app: ExportedHandler<Env> = {
 
 // The provider owns /token, /register and /.well-known/*, checks bearer tokens on /mcp, and hands
 // everything else to the app.
-export default new OAuthProvider<Env>({
+const provider = new OAuthProvider<Env>({
   apiRoute: "/mcp",
   apiHandler: mcpApiHandler,
   defaultHandler: app,
@@ -41,3 +44,8 @@ export default new OAuthProvider<Env>({
   clientRegistrationEndpoint: "/register",
   clientIdMetadataDocumentEnabled: true,
 });
+
+export default {
+  fetch: (request, env, ctx) => provider.fetch(request, env, ctx),
+  scheduled: (controller, env) => sendReminders(env, new Date(controller.scheduledTime)),
+} satisfies ExportedHandler<Env>;

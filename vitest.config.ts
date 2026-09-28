@@ -20,7 +20,14 @@ export default defineConfig({
           cloudflareTest({
             wrangler: { configPath: "./wrangler.jsonc" },
             miniflare: {
-              bindings: { TEST_MIGRATIONS: migrations, REGISTRATION_SECRET: "dev-invite", STD_TOKEN: STD_TEST_TOKEN },
+              bindings: {
+                TEST_MIGRATIONS: migrations,
+                REGISTRATION_SECRET: "dev-invite",
+                STD_TOKEN: STD_TEST_TOKEN,
+                // A throwaway pair from scripts/generate-vapid.mjs.
+                VAPID_PUBLIC_KEY: "BDcR3KZKZXlURDtrEfdHD0ZtgZyvqObi7k5Ju2pdJ5uNpBbeOWsRO70rv8Spgz_rrBLVitJBmZVBYutDPtKbvdQ",
+                VAPID_PRIVATE_KEY: "7LNItU2ManjIiZCIWuF-GurmEIDugf-h-fwEbe9hK30",
+              },
               serviceBindings: { STD: stdMock },
             },
           }),

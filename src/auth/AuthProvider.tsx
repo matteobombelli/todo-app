@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { LoginBody, RegisterBody, User } from "../../shared/api";
+import type { LoginBody, RegisterBody, SettingsBody, User } from "../../shared/api";
 import { ApiError, UNAUTHORIZED_EVENT, api } from "../api/client";
 
 interface AuthValue {
@@ -8,7 +8,7 @@ interface AuthValue {
   login(email: string, password: string): Promise<void>;
   register(email: string, password: string, inviteCode: string): Promise<void>;
   logout(): Promise<void>;
-  setTimezone(timezone: string): Promise<void>;
+  updateSettings(settings: SettingsBody): Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -86,15 +86,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [setUser]);
 
-  const setTimezone = useCallback(
-    async (timezone: string) => {
-      setUser((await api<{ user: User }>("/settings", { method: "PATCH", body: { timezone } })).user);
+  const updateSettings = useCallback(
+    async (body: SettingsBody) => {
+      setUser((await api<{ user: User }>("/settings", { method: "PATCH", body })).user);
     },
     [setUser],
   );
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, setTimezone }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateSettings }}>
       {children}
     </AuthContext.Provider>
   );

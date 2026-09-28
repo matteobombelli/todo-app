@@ -17,6 +17,7 @@
     "db:migration": "wrangler d1 migrations create todo-app"
   },
   "dependencies": {
+    "@block65/webcrypto-web-push": "^2.0.0",
     "@cloudflare/workers-oauth-provider": "^0.10.3",
     "@fontsource-variable/figtree": "^5.3.0",
     "@modelcontextprotocol/server": "^2.0.0",
