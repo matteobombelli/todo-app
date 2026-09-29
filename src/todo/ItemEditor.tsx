@@ -2,7 +2,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import type { Item } from "../../shared/entities";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Modal, useModal } from "../components/Modal";
-import { useData, useLists } from "../data/hooks";
+import { RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
+import { localNow, useData, useLists } from "../data/hooks";
 import { store } from "../data/instance";
 
 export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void }) {
@@ -12,11 +13,15 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
   const [notes, setNotes] = useState(item.notes);
   const [dueDate, setDueDate] = useState(item.due_date ?? "");
   const [dueTime, setDueTime] = useState(item.due_time ?? "");
+  const [repeat, setRepeat] = useState(() => repeatFromRRule(item.rrule, item.due_date ?? localNow().date));
   const [listId, setListId] = useState(item.list_id);
   const [modal, close] = useModal(onClose);
   const [confirmDialog, confirm] = useConfirm();
 
   const subtaskCount = useMemo(() => Object.values(items).filter((i) => i.parent_id === item.id).length, [items, item.id]);
+
+  // Repeating items are never subtasks or parents (see completeItem).
+  const canRepeat = item.parent_id === null && subtaskCount === 0 && dueDate !== "";
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -27,6 +32,7 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
       notes,
       due_date: dueDate || null,
       due_time: dueDate && dueTime ? dueTime : null,
+      rrule: canRepeat ? repeatToRRule(repeat) : null,
       list_id: listId,
       // A subtask moved to another list on its own leaves its parent behind.
       parent_id: listId === item.list_id ? item.parent_id : null,
@@ -62,6 +68,9 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
             <input type="time" value={dueTime} disabled={!dueDate} onChange={(e) => setDueTime(e.target.value)} />
           </label>
         </div>
+        {canRepeat && (
+          <RepeatFields repeat={repeat} startDate={dueDate} onChange={(patch: Partial<RepeatForm>) => setRepeat((r) => ({ ...r, ...patch }))} />
+        )}
         <label className="field">
           <span className="field__label">List</span>
           <select value={listId} onChange={(e) => setListId(e.target.value)}>

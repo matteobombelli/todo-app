@@ -43,8 +43,12 @@ export const ItemFields = z
     completed_at: z.number().int().nullable(),
     // A subtask's parent item. Records and clients from before subtasks leave it out.
     parent_id: Id.nullable().default(null),
+    // Repeats from due_date: completing the item moves it to the next occurrence (see completeItem).
+    rrule: RRule.nullable().default(null),
   })
-  .refine((i) => i.due_time === null || i.due_date !== null, { message: "due_time needs due_date", path: ["due_time"] });
+  .refine((i) => i.due_time === null || i.due_date !== null, { message: "due_time needs due_date", path: ["due_time"] })
+  .refine((i) => i.rrule === null || i.due_date !== null, { message: "A repeating item needs a due date", path: ["rrule"] })
+  .refine((i) => i.rrule === null || i.parent_id === null, { message: "A subtask can't repeat", path: ["rrule"] });
 
 const eventTimesValid = (e: {
   all_day: boolean;

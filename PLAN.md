@@ -16,7 +16,7 @@ The repo `/home/matte/todo-app` is empty (one commit, README only). This plan wa
 | Offline | Offline-first. IndexedDB mirror + mutation outbox, syncs on reconnect. Last-write-wins per record. |
 | Reminders | None in v1. |
 | Save-the-date | **Read-only**, fetched live through a service binding. Shows proposed (hatched), upcoming and saved. |
-| Recurrence | RRULE subset (daily / weekly on chosen weekdays / monthly / yearly, interval, end: never / until date / count). Edit or delete "this occurrence" or "whole series". Todo items do not recur. |
+| Recurrence | RRULE subset (daily / weekly on chosen weekdays / monthly / yearly, interval, end: never / until date / count). Edit or delete "this occurrence" or "whole series". Todo items do not recur in v1 (later added: an item's `rrule` rolls its due date forward on completion; see CLAUDE.md). |
 | Week view | Sunday to Saturday around the selected date (the month grid starts on Sunday too). |
 | Item order | Auto: overdue, then by due date/time, then undated (by created), each item followed by its open subtasks (one level deep). Completed collapsed at bottom as "Completed (n)". Long-press and drop an item onto another to make it a subtask, or onto empty space to make it top-level; dragging never reorders items. A parent's subtasks fold away behind a chevron (remembered per device). Lists are reordered by long-press and drag. |
 | Overdue | Red in lists; pinned in an "Overdue" section at the top of today's agenda and in Claude's rundown. |

@@ -1,15 +1,16 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Repeat } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Item, List } from "../../shared/entities";
-import { isOverdue, type Now } from "../../shared/items";
+import { completeItem, isOverdue, type Now } from "../../shared/items";
 import { Checkbox } from "../components/Checkbox";
 import { paletteVar } from "../components/ColorPicker";
 import { haptic, transitionMs } from "../components/motion";
+import { localNow } from "../data/hooks";
 import { store } from "../data/instance";
 import { formatRelativeDate, formatTime } from "../format";
 
 export function toggleItem(item: Item): void {
-  void store.upsert("items", { ...item, completed_at: item.completed_at === null ? Date.now() : null });
+  void store.upsert("items", item.completed_at === null ? completeItem(item, localNow()) : { ...item, completed_at: null });
 }
 
 export function dueLabel(item: Item, today: string): string | null {
@@ -83,6 +84,7 @@ export function ItemRow({
           <button type="button" className="item__body" onClick={() => onOpen(item)}>
             {list && <span className="dot" style={{ background: paletteVar(list.color) }} aria-hidden="true" />}
             <span className="row__title">{item.title}</span>
+            {item.rrule && <Repeat size={14} className="item__repeat" aria-label="Repeats" />}
             {chip && <span className={`chip${isOverdue(item, now) ? " chip--overdue" : ""}`}>{chip}</span>}
             {context && <span className="row__meta">{context}</span>}
           </button>

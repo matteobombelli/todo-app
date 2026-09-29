@@ -199,6 +199,7 @@ describe("DataStore", () => {
       due_time: null,
       completed_at: null,
       parent_id: null,
+      rrule: null,
     });
     const doomed = await store.upsert("items", item(l.id));
     const survivor = await store.upsert("items", item(other.id));
@@ -224,6 +225,7 @@ describe("DataStore", () => {
       due_time: null,
       completed_at: null,
       parent_id: null,
+      rrule: null,
       ...overrides,
     });
     const parent = await store.upsert("items", fields());

@@ -16,6 +16,7 @@ function item(overrides: Partial<Item> = {}): Item {
     due_time: null,
     completed_at: null,
     parent_id: null,
+    rrule: null,
     created_at: n,
     updated_at: n,
     seq: n,

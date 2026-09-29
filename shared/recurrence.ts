@@ -137,6 +137,19 @@ export function ruleDates(start: string, rule: RRule, limit: string): string[] {
   return out;
 }
 
+const LAST_DATE = "9999-12-31";
+
+/**
+ * The first date the rule generates after `after`, counting from `from` (a repeating item's due
+ * date). COUNT is ignored: the item tracks what remains itself. Null once UNTIL has passed.
+ */
+export function nextOccurrence(rule: RRule, from: string, after: string): string | null {
+  // Long enough to cross the widest gap a rule can have (Feb 29 with a yearly interval).
+  const reach = Math.min(toDayNumber(after) + 8 * 366 * rule.interval, toDayNumber(LAST_DATE));
+  const limit = fromDayNumber(reach);
+  return ruleDates(from, { ...rule, count: null }, limit).find((date) => date > after) ?? null;
+}
+
 type Schedule = Pick<
   RecurringEvent,
   "all_day" | "start_date" | "start_time" | "end_date" | "end_time"

@@ -888,6 +888,11 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.item__repeat {
+  flex: none;
+  color: var(--muted);
+}
+
 .row__chevron {
   color: var(--muted);
 }

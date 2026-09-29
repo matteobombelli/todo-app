@@ -1,25 +1,20 @@
 import { useState, type FormEvent } from "react";
-import { addDays, daysBetween, isDate, weekday } from "../../shared/dates";
+import { addDays, daysBetween, isDate } from "../../shared/dates";
 import type { PaletteKey } from "../../shared/palette";
-import { WEEKDAY_CODES, type Occurrence } from "../../shared/recurrence";
+import type { Occurrence } from "../../shared/recurrence";
 import { ColorPicker } from "../components/ColorPicker";
+import { RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
 import { Checkbox } from "../components/Checkbox";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Modal, useModal } from "../components/Modal";
 import { store } from "../data/instance";
 import {
   deleteEvent,
-  repeatFromRRule,
-  repeatToRRule,
   saveEvent,
   validateEvent,
   type EventForm,
-  type RepeatForm,
   type Scope,
 } from "./eventActions";
-
-const FREQ_UNITS = { DAILY: "day", WEEKLY: "week", MONTHLY: "month", YEARLY: "year" } as const;
-const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
 function initialForm(occurrence: Occurrence | null, date: string): EventForm {
   if (!occurrence) {
@@ -156,86 +151,7 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
             )}
           </div>
 
-          <fieldset className="repeat">
-            <legend className="field__label">Repeat</legend>
-            <div className="field-row">
-              <select
-                aria-label="Repeat"
-                value={repeat.freq}
-                onChange={(e) =>
-                  setRepeat({
-                    freq: e.target.value as RepeatForm["freq"],
-                    byDay: repeat.byDay.length || !isDate(form.start_date) ? repeat.byDay : [weekday(form.start_date)],
-                  })
-                }
-              >
-                <option value="NONE">Does not repeat</option>
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-                <option value="YEARLY">Yearly</option>
-              </select>
-              {repeat.freq !== "NONE" && (
-                <label className="inline-field">
-                  every
-                  <input
-                    type="number"
-                    min={1}
-                    max={999}
-                    className="input--narrow"
-                    value={repeat.interval}
-                    onChange={(e) => setRepeat({ interval: Number(e.target.value) })}
-                  />
-                  {FREQ_UNITS[repeat.freq]}
-                  {repeat.interval === 1 ? "" : "s"}
-                </label>
-              )}
-            </div>
-            {repeat.freq === "WEEKLY" && (
-              <div className="weekday-picker" role="group" aria-label="On">
-                {WEEKDAY_LETTERS.map((letter, day) => (
-                  <button
-                    key={day}
-                    type="button"
-                    aria-pressed={repeat.byDay.includes(day)}
-                    aria-label={WEEKDAY_CODES[day]}
-                    onClick={() =>
-                      setRepeat({
-                        byDay: repeat.byDay.includes(day) ? repeat.byDay.filter((d) => d !== day) : [...repeat.byDay, day],
-                      })
-                    }
-                  >
-                    {letter}
-                  </button>
-                ))}
-              </div>
-            )}
-            {repeat.freq !== "NONE" && (
-              <div className="field-row">
-                <select aria-label="Ends" value={repeat.end} onChange={(e) => setRepeat({ end: e.target.value as RepeatForm["end"] })}>
-                  <option value="never">Never ends</option>
-                  <option value="until">Ends on</option>
-                  <option value="count">Ends after</option>
-                </select>
-                {repeat.end === "until" && (
-                  <input type="date" aria-label="End date" required value={repeat.until} onChange={(e) => setRepeat({ until: e.target.value })} />
-                )}
-                {repeat.end === "count" && (
-                  <label className="inline-field">
-                    <input
-                      type="number"
-                      min={1}
-                      max={10000}
-                      className="input--narrow"
-                      value={repeat.count}
-                      onChange={(e) => setRepeat({ count: Number(e.target.value) })}
-                    />
-                    times
-                  </label>
-                )}
-              </div>
-            )}
-          </fieldset>
+          <RepeatFields repeat={repeat} startDate={form.start_date} onChange={setRepeat} />
 
           <div className="field">
             <span className="field__label">Colour</span>

@@ -1,4 +1,5 @@
-import type { Item } from "./entities";
+import type { Item, ItemFields } from "./entities";
+import { nextOccurrence, parseRRule, serializeRRule } from "./recurrence";
 
 export interface Now {
   date: string;
@@ -61,4 +62,22 @@ export function cascadeToSubtasks<T extends Placement>(before: Placement | null,
     const completed_at = completing && sub.completed_at === null ? after.completed_at : sub.completed_at;
     return sub.list_id === after.list_id && completed_at === sub.completed_at ? [] : [{ ...sub, list_id: after.list_id, completed_at }];
   });
+}
+
+/**
+ * The record to write when an open item is checked off. A repeating item moves to its next due date
+ * and stays open; when the rule has no next date (UNTIL passed, COUNT used up) it completes like any
+ * other item. COUNT is the occurrences left, this one included, so each roll takes one off.
+ */
+export function completeItem<T extends ItemFields>(item: T, now: Now, at = Date.now()): T {
+  if (item.rrule === null || item.due_date === null) return { ...item, completed_at: at };
+  const rule = parseRRule(item.rrule);
+  if (rule.count === 1) return { ...item, completed_at: at };
+  const next = nextOccurrence(rule, item.due_date, item.due_date > now.date ? item.due_date : now.date);
+  if (next === null) return { ...item, completed_at: at };
+  return {
+    ...item,
+    due_date: next,
+    rrule: serializeRRule({ ...rule, count: rule.count === null ? null : rule.count - 1 }),
+  };
 }

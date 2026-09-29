@@ -238,6 +238,25 @@ describe("sync and mutations", () => {
     expect(await errors(item(home.id))).toBe("applied");
   });
 
+  it("keeps repeating items apart from subtasks and needs them to be dated", async () => {
+    const cookie = await login();
+    const home = list();
+    const parent = item(home.id, { due_date: "2026-09-10" });
+    const withSubtask = item(home.id, { due_date: "2026-09-10" });
+    await mutate(cookie, [upsert("lists", home), upsert("items", parent), upsert("items", withSubtask), upsert("items", item(home.id, { parent_id: withSubtask.id }))]);
+
+    const errors = async (record: Record<string, unknown>) => {
+      const [result] = await mutate(cookie, [upsert("items", record)]);
+      return result.status === "rejected" ? result.error : "applied";
+    };
+    const rrule = "FREQ=WEEKLY";
+    expect(await errors(item(home.id, { rrule }))).toBe("rrule: A repeating item needs a due date");
+    expect(await errors(item(home.id, { rrule, due_date: "2026-09-10", parent_id: parent.id }))).toBe("rrule: A subtask can't repeat");
+    expect(await errors({ ...withSubtask, rrule })).toBe("A repeating item can't have subtasks");
+    expect(await errors({ ...parent, rrule })).toBe("applied");
+    expect(await errors(item(home.id, { parent_id: parent.id }))).toBe("parent_id names a repeating item, and those can't have subtasks");
+  });
+
   it("carries subtasks along when their parent moves, completes or is deleted", async () => {
     const cookie = await login();
     const home = list();

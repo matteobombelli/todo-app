@@ -22,6 +22,10 @@ const RRule = z
     "Recurrence as an RRULE subset: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY, optional INTERVAL=n, BYDAY=MO,TU,... (weekly only), and UNTIL=YYYYMMDD or COUNT=n. Example: FREQ=WEEKLY;BYDAY=MO,WE",
   );
 
+const ItemRRule = RRule.describe(
+  "Repeats the item from its due date, for chores, habits and the like. Completing it moves the due date to the next occurrence instead of closing it. Needs due_date; not for subtasks or items with subtasks. Example: FREQ=WEEKLY;BYDAY=MO,WE",
+);
+
 const Parent = z.string().describe("The parent item's id: makes this a subtask (one level deep, same list). Completing, moving or deleting a parent does the same to its subtasks");
 
 const ItemCreate = z.object({
@@ -31,6 +35,7 @@ const ItemCreate = z.object({
   notes: z.string().optional(),
   due_date: DateArg.optional(),
   due_time: TimeArg.optional(),
+  rrule: ItemRRule.optional(),
 });
 
 const ItemUpdate = z.object({
@@ -39,6 +44,7 @@ const ItemUpdate = z.object({
   notes: z.string().optional(),
   due_date: DateArg.nullable().optional(),
   due_time: TimeArg.nullable().optional(),
+  rrule: ItemRRule.nullable().optional().describe("null stops repeating"),
   completed: z.boolean().optional(),
   list: ListRef.optional(),
   parent: Parent.nullable().optional().describe("Parent item id, or null to make it a top-level item again. Moving a subtask to another list on its own clears it"),
@@ -196,7 +202,7 @@ export function buildServer(env: Env, userId: string): McpServer {
   server.registerTool(
     "update_item",
     {
-      description: `Edit a todo item: title, notes, due date/time (null clears), completed (true marks it done, false reopens it), or move it to another list. Edit several with \`items\` in one call. ${TIME_NOTE}`,
+      description: `Edit a todo item: title, notes, due date/time (null clears), completed (true marks it done, or for a repeating item moves it to its next occurrence; false reopens it), or move it to another list. Edit several with \`items\` in one call. ${TIME_NOTE}`,
       inputSchema: batchable(ItemUpdate, "items", "items"),
     },
     (args) => write(args, "items", ItemUpdate, (ops) => todo.updateItems(s, ops)),

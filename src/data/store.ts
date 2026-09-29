@@ -119,8 +119,8 @@ export class DataStore {
     }
     const tables = {} as Record<Entity, Record<string, EntityRecord[Entity]>>;
     for (const e of ENTITIES) {
-      // Items cached before subtasks existed have no parent_id.
-      tables[e] = Object.fromEntries((await db.getAll(e)).map((r) => [r.id, e === "items" ? { parent_id: null, ...r } : r]));
+      // Items cached before subtasks and repeats existed have no parent_id or rrule.
+      tables[e] = Object.fromEntries((await db.getAll(e)).map((r) => [r.id, e === "items" ? { parent_id: null, rrule: null, ...r } : r]));
     }
     this.set({ tables: tables as Tables, loaded: true, pending: await db.count("outbox") });
   }

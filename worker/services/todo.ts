@@ -18,7 +18,7 @@ import {
   type Mutation,
 } from "../../shared/entities";
 import { newId } from "../../shared/ids";
-import { cascadeToSubtasks, compareItems, isOverdue, type Now } from "../../shared/items";
+import { cascadeToSubtasks, compareItems, completeItem, isOverdue, type Now } from "../../shared/items";
 import type { PaletteKey } from "../../shared/palette";
 import { occurrencesInRange, parseRRule, ruleDates, shiftRRule, type Occurrence } from "../../shared/recurrence";
 import { applyMutations, getRecords, listRecords } from "./records";
@@ -236,6 +236,7 @@ export function summarizeItem(item: Item, lists: Map<string, List>, now: Now) {
     notes: item.notes || undefined,
     due_date: item.due_date,
     due_time: item.due_time,
+    ...(item.rrule ? { rrule: item.rrule } : {}),
     completed: item.completed_at !== null,
     overdue: isOverdue(item, now),
   };
@@ -266,6 +267,7 @@ export interface ItemInput {
   notes?: string;
   due_date?: string | null;
   due_time?: string | null;
+  rrule?: string | null;
 }
 
 export interface ItemPatch {
@@ -274,6 +276,7 @@ export interface ItemPatch {
   notes?: string;
   due_date?: string | null;
   due_time?: string | null;
+  rrule?: string | null;
   completed?: boolean;
   list?: string;
   parent?: string | null;
@@ -292,33 +295,33 @@ export async function createItems(s: Scope, inputs: ItemInput[]): Promise<Item[]
         due_time: input.due_time ?? null,
         completed_at: null,
         parent_id: input.parent ?? null,
+        rrule: input.rrule ?? null,
       }),
     ),
   )) as Item[];
 }
 
 export async function updateItems(s: Scope, patches: ItemPatch[]): Promise<Item[]> {
+  const now = await userNow(s);
   return (await runBatch(s, ["lists", "items"], patches, (b, patch) => {
     const item = b.live("items", patch.id, "item");
     const listId = patch.list ? b.list(patch.list).id : item.list_id;
-    const completedAt =
-      patch.completed === undefined ? item.completed_at : patch.completed ? (item.completed_at ?? Date.now()) : null;
     const dueDate = patch.due_date === undefined ? item.due_date : patch.due_date;
-    return b.upsert(
-      "items",
-      check(ItemFields, {
-        ...item,
-        title: patch.title ?? item.title,
-        notes: patch.notes ?? item.notes,
-        due_date: dueDate,
-        // Clearing the date clears the time with it.
-        due_time: dueDate === null ? null : patch.due_time === undefined ? item.due_time : patch.due_time,
-        completed_at: completedAt,
-        list_id: listId,
-        // A subtask moved to another list on its own leaves its parent behind.
-        parent_id: patch.parent !== undefined ? patch.parent : listId === item.list_id ? item.parent_id : null,
-      }),
-    );
+    const edited = check(ItemFields, {
+      ...item,
+      title: patch.title ?? item.title,
+      notes: patch.notes ?? item.notes,
+      due_date: dueDate,
+      // Clearing the date clears the time and the repeat with it.
+      due_time: dueDate === null ? null : patch.due_time === undefined ? item.due_time : patch.due_time,
+      rrule: dueDate === null ? null : patch.rrule === undefined ? item.rrule : patch.rrule,
+      list_id: listId,
+      // A subtask moved to another list on its own leaves its parent behind.
+      parent_id: patch.parent !== undefined ? patch.parent : listId === item.list_id ? item.parent_id : null,
+    });
+    if (patch.completed === undefined) return b.upsert("items", edited);
+    if (!patch.completed) return b.upsert("items", { ...edited, completed_at: null });
+    return b.upsert("items", item.completed_at === null ? completeItem(edited, now) : edited);
   })) as Item[];
 }
 

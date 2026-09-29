@@ -56,7 +56,8 @@ export default function ListPage() {
   );
 
   // Dropping an item onto another makes it a subtask; onto a subtask, a sibling of it (one level
-  // deep). Dropping a subtask onto no item makes it top-level again. An item with subtasks stays put.
+  // deep). Dropping a subtask onto no item makes it top-level again. An item with subtasks stays put,
+  // and repeating items are never subtasks or parents.
   const parentFor = (target: string) => items[target].parent_id ?? target;
   const hasSubtasks = (id: string) => Object.values(items).some((i) => i.parent_id === id);
   useDropOnto(
@@ -64,7 +65,13 @@ export default function ListPage() {
     open.map(({ item, nested }) => `${item.id}${nested ? ">" : ""}`).join(),
     (dragged, target) => {
       const parent = parentFor(target);
-      return parent !== dragged && parent !== items[dragged].parent_id && !hasSubtasks(dragged);
+      return (
+        parent !== dragged &&
+        parent !== items[dragged].parent_id &&
+        !hasSubtasks(dragged) &&
+        !items[dragged].rrule &&
+        !items[parent].rrule
+      );
     },
     (dragged, target) => {
       const item = items[dragged];
@@ -104,6 +111,7 @@ export default function ListPage() {
       due_time: null,
       completed_at: null,
       parent_id: null,
+      rrule: null,
     });
   }
 

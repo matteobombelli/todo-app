@@ -135,10 +135,15 @@ function subtasksOf(rows: Map<string, Row>, id: string): (Row & { list_id: strin
 }
 
 /** Why an item can't have the parent it names, once that parent is known to be a live item. */
-function subtaskProblem(item: { id: string; list_id: string; parent_id: string | null }, rows: Map<string, Row>): string | null {
+function subtaskProblem(
+  item: { id: string; list_id: string; parent_id: string | null; rrule: string | null },
+  rows: Map<string, Row>,
+): string | null {
+  if (item.rrule !== null && subtasksOf(rows, item.id).length) return "A repeating item can't have subtasks";
   if (item.parent_id === null) return null;
   if (item.parent_id === item.id) return "An item can't be its own subtask";
   const parent = rows.get(rowKey("items", item.parent_id))!;
+  if (parent.rrule !== null) return "parent_id names a repeating item, and those can't have subtasks";
   if (parent.list_id !== item.list_id) return "parent_id names an item in another list";
   if (parent.parent_id !== null) return "parent_id names a subtask, and subtasks can't have their own";
   if (subtasksOf(rows, item.id).length) return "An item with subtasks can't become a subtask";
@@ -230,7 +235,7 @@ export async function applyMutations(db: D1Database, userId: string, mutations: 
       }
     }
     if (m.entity === "items") {
-      const problem = subtaskProblem(fields as { id: string; list_id: string; parent_id: string | null }, rows);
+      const problem = subtaskProblem(fields as { id: string; list_id: string; parent_id: string | null; rrule: string | null }, rows);
       if (problem) return reject(problem, current);
     }
 

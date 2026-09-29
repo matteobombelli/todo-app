@@ -35,8 +35,8 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 
 - `shared/`: code used by the client, the API and MCP. `entities.ts` is the wire format for synced
   records and mutations (zod), `recurrence.ts` the RRULE subset and occurrence expansion, `agenda.ts`
-  a day's ordered agenda (the calendar UI and `get_agenda` both use it), `items.ts` item ordering and
-  overdue, `dates.ts` floating date arithmetic, `palette.ts` the only colour values, `std.ts` the
+  a day's ordered agenda (the calendar UI and `get_agenda` both use it), `items.ts` item ordering,
+  overdue and completing an item (`completeItem`), `dates.ts` floating date arithmetic, `palette.ts` the only colour values, `std.ts` the
   save-the-date app URL.
 - `worker/`: `index.ts` wraps everything in `OAuthProvider`; `/api/*` goes to the hand-written
   `Router`, `/authorize` to `routes/authorize.ts`, `/connect/save-the-date` to `routes/connect.ts`,
@@ -67,6 +67,15 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 - MCP writes go through `applyMutations`, the batch form of `applyMutation` with the same checks, so
   the app sees them on its next pull. Each tool call is one all-or-nothing batch with a single
   `user_seq` bump; the write tools take one entry or an array (`items` / `events`).
+
+## Repeating items
+
+An item with an `rrule` (same subset as events, repeating from its `due_date`) is a single row that rolls
+forward: `completeItem` (used by the app and MCP `update_item`, not by the server write path) moves
+`due_date` to the first occurrence after today and the current due date instead of setting
+`completed_at`. `COUNT` is the occurrences left, so each roll decrements it; once `UNTIL` has passed or
+`COUNT` reaches 1 the item completes normally. Repeating items need a `due_date` and can neither be
+subtasks nor have them (checked by the schema and `subtaskProblem`). No completion history is kept.
 
 ## Time
 

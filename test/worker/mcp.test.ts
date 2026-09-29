@@ -397,6 +397,17 @@ describe("MCP bulk writes", () => {
     expect(result.data[1].completed_at).toEqual(expect.any(Number));
   });
 
+  it("moves a repeating item to its next date instead of completing it", async () => {
+    const created = (await call(token, "create_item", { list: "Chores", title: "Mop", due_date: "2999-01-01", rrule: "FREQ=DAILY;COUNT=2" })).data;
+    expect(created).toMatchObject({ due_date: "2999-01-01", rrule: "FREQ=DAILY;COUNT=2" });
+    const rolled = (await call(token, "update_item", { id: created.id, completed: true })).data;
+    expect(rolled).toMatchObject({ due_date: "2999-01-02", rrule: "FREQ=DAILY;COUNT=1", completed_at: null });
+    const last = (await call(token, "update_item", { id: created.id, completed: true })).data;
+    expect(last).toMatchObject({ due_date: "2999-01-02", completed_at: expect.any(Number) });
+    const cleared = (await call(token, "update_item", { id: created.id, due_date: null })).data;
+    expect(cleared).toMatchObject({ due_date: null, rrule: null });
+  });
+
   it("creates and deletes many events, occurrences included", async () => {
     const created = (
       await call(token, "create_event", {

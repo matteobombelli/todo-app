@@ -2,17 +2,9 @@ import { EventFields, EventExceptionFields } from "../../shared/entities";
 import { addDays, daysBetween } from "../../shared/dates";
 import { newId } from "../../shared/ids";
 import type { PaletteKey } from "../../shared/palette";
-import { parseRRule, serializeRRule, shiftRRule, type Freq, type Occurrence } from "../../shared/recurrence";
+import { shiftRRule, type Occurrence } from "../../shared/recurrence";
+import { repeatToRRule, type RepeatForm } from "../components/RepeatFields";
 import { store } from "../data/instance";
-
-export interface RepeatForm {
-  freq: Freq | "NONE";
-  interval: number;
-  byDay: number[];
-  end: "never" | "until" | "count";
-  until: string;
-  count: number;
-}
 
 export interface EventForm {
   title: string;
@@ -27,32 +19,6 @@ export interface EventForm {
 }
 
 export type Scope = "occurrence" | "series";
-
-export function repeatFromRRule(rrule: string | null, startDate: string): RepeatForm {
-  const base: RepeatForm = { freq: "NONE", interval: 1, byDay: [], end: "never", until: addDays(startDate, 30), count: 10 };
-  if (!rrule) return base;
-  const r = parseRRule(rrule);
-  return {
-    ...base,
-    freq: r.freq,
-    interval: r.interval,
-    byDay: r.byDay,
-    end: r.until ? "until" : r.count ? "count" : "never",
-    until: r.until ?? base.until,
-    count: r.count ?? base.count,
-  };
-}
-
-export function repeatToRRule(repeat: RepeatForm): string | null {
-  if (repeat.freq === "NONE") return null;
-  return serializeRRule({
-    freq: repeat.freq,
-    interval: Math.max(1, Math.floor(repeat.interval) || 1),
-    byDay: repeat.freq === "WEEKLY" ? [...repeat.byDay].sort((a, b) => a - b) : [],
-    until: repeat.end === "until" ? repeat.until : null,
-    count: repeat.end === "count" ? Math.max(1, Math.floor(repeat.count) || 1) : null,
-  });
-}
 
 function schedule(form: EventForm) {
   return {
