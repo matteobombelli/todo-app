@@ -17,13 +17,13 @@ export default function ListsPage() {
 
   return (
     <div className="page">
-      <div className="page__header">
-        <h1>Lists</h1>
-        <button type="button" className="button--primary button--icon" onClick={() => setCreating(true)}>
-          <Plus size={18} aria-hidden="true" />
-          New list
+      <div className="nav-bar">
+        <button type="button" className="button--plain button--icon nav-bar__end" onClick={() => setCreating(true)}>
+          <Plus size={20} aria-hidden="true" />
+          New List
         </button>
       </div>
+      <h1 className="large-title">Lists</h1>
       {lists.length === 0 ? <p className="empty">No lists yet. Create one to start adding items.</p> : <ListRows />}
       {creating && (
         <ListEditor list={null} nextSortOrder={(lists.at(-1)?.sort_order ?? 0) + 1} onClose={() => setCreating(false)} />

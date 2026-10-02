@@ -1,4 +1,3 @@
-import "@fontsource-variable/figtree";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Navigate, createBrowserRouter } from "react-router";

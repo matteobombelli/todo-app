@@ -172,7 +172,8 @@ function longPressDrag(
   const down = (e: PointerEvent) => {
     swallowClick = false;
     const li = (e.target as Element).closest("li");
-    if (e.button !== 0 || !li || li.parentElement !== list) return;
+    // Holding a press in a text field selects text; it never lifts the row.
+    if (e.button !== 0 || !li || li.parentElement !== list || (e.target as Element).closest("input, textarea")) return;
     hold = { x: e.clientX, y: e.clientY, id: e.pointerId, li, timer: setTimeout(lift, HOLD) };
   };
   const move = (e: PointerEvent) => {
@@ -314,7 +315,7 @@ export function useDropOnto(
       document
         .elementsFromPoint(e.clientX, e.clientY)
         .map((el) => el.closest("li"))
-        .find((el): el is HTMLLIElement => !!el && el !== li && el.parentElement === list) ?? null;
+        .find((el): el is HTMLLIElement => !!el && el !== li && el.parentElement === list && !!el.dataset.id) ?? null;
     const mark = (row: HTMLElement | null) => {
       over?.classList.remove("drag--target");
       over = row;
@@ -364,7 +365,7 @@ export function useShortcuts(keys: Record<string, () => void>): void {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       if ((e.target as Element).closest("input, textarea, select, [contenteditable]")) return;
-      if (document.querySelector("[aria-modal]")) return;
+      if (document.querySelector('[aria-modal], [role="menu"]')) return;
       const handler = current.current[e.key];
       if (!handler) return;
       e.preventDefault();

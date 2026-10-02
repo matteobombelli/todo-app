@@ -43,7 +43,9 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
   other paths to the assets. `services/records.ts` is
   the single write path; `services/todo.ts` holds the MCP operations; `mcp.ts` registers the tools;
   `services/push.ts` the reminders the `scheduled` handler sends.
-- `src/`: the SPA. `data/store.ts` is the offline mirror; `todo/` and `calendar/` are the two tabs;
+- `src/`: the SPA. `data/store.ts` is the offline mirror; `todo/` and `calendar/` are the two tabs.
+  Row actions live in context menus (`components/Menu.tsx`, opened by right-click or a row's kebab;
+  `todo/itemMenu.tsx` for items), and tapping an item in a list opens a row to add one below it;
   `push.ts` subscribes the browser to reminders. `public/push-sw.js` is imported into the generated
   service worker to show them.
 

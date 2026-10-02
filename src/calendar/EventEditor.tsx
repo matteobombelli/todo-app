@@ -44,7 +44,7 @@ function initialForm(occurrence: Occurrence | null, date: string): EventForm {
   };
 }
 
-function ScopeDialog({ verb, onPick, onClose }: { verb: string; onPick: (s: Scope) => void; onClose: () => void }) {
+export function ScopeDialog({ verb, onPick, onClose }: { verb: string; onPick: (s: Scope) => void; onClose: () => void }) {
   const [modal, close] = useModal(onClose);
   const pick = (scope: Scope) => {
     close();

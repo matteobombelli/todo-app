@@ -1,9 +1,10 @@
-import { ChevronRight, Repeat } from "lucide-react";
-import { useRef, useState } from "react";
+import { ChevronRight, Ellipsis, Repeat } from "lucide-react";
+import { useRef, useState, type MouseEvent } from "react";
 import type { Item, List } from "../../shared/entities";
 import { completeItem, isOverdue, type Now } from "../../shared/items";
 import { Checkbox } from "../components/Checkbox";
 import { paletteVar } from "../components/ColorPicker";
+import { IconButton } from "../components/IconButton";
 import { haptic, transitionMs } from "../components/motion";
 import { localNow } from "../data/hooks";
 import { store } from "../data/instance";
@@ -25,7 +26,8 @@ export function dueLabel(item: Item, today: string): string | null {
  * `collapseOnDone` is for views that move completed items elsewhere: the row folds away first, then
  * the item is completed. `nested` indents a subtask under its parent, and `hidden` folds it away with
  * its parent's subtasks; `fold` gives a parent the toggle for that. `context` is a short note after the
- * title (a subtask's parent, where it isn't shown).
+ * title (a subtask's parent, where it isn't shown). `onTap` is what tapping the row does (nothing when
+ * left out); `onMenu` opens its actions, from a right-click or the row's kebab.
  */
 export function ItemRow({
   item,
@@ -37,7 +39,8 @@ export function ItemRow({
   hidden,
   fold,
   context,
-  onOpen,
+  onTap,
+  onMenu,
 }: {
   item: Item;
   now: Now;
@@ -48,7 +51,8 @@ export function ItemRow({
   hidden?: boolean;
   fold?: { count: number; collapsed: boolean; onToggle: () => void };
   context?: string;
-  onOpen: (item: Item) => void;
+  onTap?: (item: Item) => void;
+  onMenu?: (e: MouseEvent, item: Item) => void;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState(false);
@@ -68,6 +72,16 @@ export function ItemRow({
     }, wrapper.current ? transitionMs(wrapper.current) : 0);
   }
 
+  const body = (
+    <>
+      {list && <span className="dot" style={{ background: paletteVar(list.color) }} aria-hidden="true" />}
+      <span className="row__title">{item.title}</span>
+      {item.rrule && <Repeat size={14} className="item__repeat" aria-label="Repeats" />}
+      {chip && <span className={`chip${isOverdue(item, now) ? " chip--overdue" : ""}`}>{chip}</span>}
+      {context && <span className="row__meta">{context}</span>}
+    </>
+  );
+
   return (
     <div
       ref={wrapper}
@@ -75,19 +89,22 @@ export function ItemRow({
       inert={hidden}
     >
       <div className="collapse__inner">
-        <div className={`row item${nested ? " item--subtask" : ""}${done || leaving ? " item--done" : ""}`}>
+        <div
+          className={`row item${nested ? " item--subtask" : ""}${done || leaving ? " item--done" : ""}`}
+          onContextMenu={onMenu && ((e) => onMenu(e, item))}
+        >
           <Checkbox
             checked={done || leaving}
             onChange={() => leaving || onToggle()}
             label={done ? `Mark "${item.title}" not done` : `Mark "${item.title}" done`}
           />
-          <button type="button" className="item__body" onClick={() => onOpen(item)}>
-            {list && <span className="dot" style={{ background: paletteVar(list.color) }} aria-hidden="true" />}
-            <span className="row__title">{item.title}</span>
-            {item.rrule && <Repeat size={14} className="item__repeat" aria-label="Repeats" />}
-            {chip && <span className={`chip${isOverdue(item, now) ? " chip--overdue" : ""}`}>{chip}</span>}
-            {context && <span className="row__meta">{context}</span>}
-          </button>
+          {onTap ? (
+            <button type="button" className="item__body" onClick={() => onTap(item)}>
+              {body}
+            </button>
+          ) : (
+            <span className="item__body">{body}</span>
+          )}
           {fold && (
             <button
               type="button"
@@ -99,6 +116,15 @@ export function ItemRow({
               {fold.collapsed && <span className="row__meta">{fold.count}</span>}
               <ChevronRight size={18} className="item__fold-chevron" aria-hidden="true" />
             </button>
+          )}
+          {onMenu && (
+            <IconButton
+              icon={Ellipsis}
+              label={`Actions for "${item.title}"`}
+              className="row__kebab"
+              ariaHasPopup="menu"
+              onClick={(e) => onMenu(e, item)}
+            />
           )}
         </div>
       </div>

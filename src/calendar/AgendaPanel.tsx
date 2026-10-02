@@ -1,18 +1,27 @@
-import { useMemo } from "react";
+import { Ellipsis } from "lucide-react";
+import { useMemo, type MouseEvent, type ReactNode } from "react";
 import { buildAgenda, type ExternalEvent } from "../../shared/agenda";
 import type { Item } from "../../shared/entities";
 import type { Now } from "../../shared/items";
 import type { Occurrence } from "../../shared/recurrence";
 import { STD_COLOR } from "../../shared/palette";
 import { paletteVar } from "../components/ColorPicker";
+import { IconButton } from "../components/IconButton";
 import { useData } from "../data/hooks";
 import { formatLongDate, formatTime } from "../format";
 import { ItemRow } from "../todo/ItemRow";
+
+export type CalendarTarget =
+  | { kind: "event"; occurrence: Occurrence }
+  | { kind: "external"; event: ExternalEvent }
+  | { kind: "item"; item: Item };
 
 export interface CalendarHandlers {
   onEvent: (o: Occurrence) => void;
   onExternal: (e: ExternalEvent) => void;
   onItem: (i: Item) => void;
+  /** Opens the actions for an entry, from a right-click or its kebab. */
+  onMenu: (e: MouseEvent, target: CalendarTarget) => void;
 }
 
 function timeRange(o: Occurrence): string {
@@ -20,19 +29,45 @@ function timeRange(o: Occurrence): string {
   return `${formatTime(o.start_time!)} to ${formatTime(o.end_time!)}`;
 }
 
-function EventRow({ occurrence, onEvent }: { occurrence: Occurrence; onEvent: (o: Occurrence) => void }) {
+/** An agenda entry: tapping opens it; a right-click or the kebab shows its actions. */
+function EntryRow({
+  title,
+  onOpen,
+  onMenu,
+  children,
+}: {
+  title: string;
+  onOpen: () => void;
+  onMenu: (e: MouseEvent) => void;
+  children: ReactNode;
+}) {
   return (
-    <button type="button" className="row agenda-event" onClick={() => onEvent(occurrence)}>
-      <span className="agenda-event__bar" style={{ background: paletteVar(occurrence.color) }} aria-hidden="true" />
-      <span className="row__title">{occurrence.title}</span>
-      <span className="row__meta">{timeRange(occurrence)}</span>
-    </button>
+    <div className="row agenda-event" onContextMenu={onMenu}>
+      <button type="button" className="item__body" onClick={onOpen}>
+        {children}
+      </button>
+      <IconButton icon={Ellipsis} label={`Actions for "${title}"`} className="row__kebab" ariaHasPopup="menu" onClick={onMenu} />
+    </div>
   );
 }
 
-function ExternalRow({ event, onExternal }: { event: ExternalEvent; onExternal: (e: ExternalEvent) => void }) {
+function EventRow({ occurrence, handlers }: { occurrence: Occurrence; handlers: CalendarHandlers }) {
   return (
-    <button type="button" className="row agenda-event" onClick={() => onExternal(event)}>
+    <EntryRow
+      title={occurrence.title}
+      onOpen={() => handlers.onEvent(occurrence)}
+      onMenu={(e) => handlers.onMenu(e, { kind: "event", occurrence })}
+    >
+      <span className="agenda-event__bar" style={{ background: paletteVar(occurrence.color) }} aria-hidden="true" />
+      <span className="row__title">{occurrence.title}</span>
+      <span className="row__meta">{timeRange(occurrence)}</span>
+    </EntryRow>
+  );
+}
+
+function ExternalRow({ event, handlers }: { event: ExternalEvent; handlers: CalendarHandlers }) {
+  return (
+    <EntryRow title={event.title} onOpen={() => handlers.onExternal(event)} onMenu={(e) => handlers.onMenu(e, { kind: "external", event })}>
       <span
         className={`agenda-event__bar${event.status === "proposed" ? " hatched" : ""}`}
         style={{ backgroundColor: STD_COLOR }}
@@ -40,7 +75,7 @@ function ExternalRow({ event, onExternal }: { event: ExternalEvent; onExternal: 
       />
       <span className="row__title">{event.title}</span>
       <span className="row__meta">{event.start_time ? formatTime(event.start_time) : "Save the Date"}</span>
-    </button>
+    </EntryRow>
   );
 }
 
@@ -65,7 +100,14 @@ export function AgendaPanel({
   );
   const itemRow = (item: Item) => (
     <li key={item.id}>
-      <ItemRow item={item} now={now} list={lists[item.list_id]} due="time" onOpen={handlers.onItem} />
+      <ItemRow
+        item={item}
+        now={now}
+        list={lists[item.list_id]}
+        due="time"
+        onTap={handlers.onItem}
+        onMenu={(e, i) => handlers.onMenu(e, { kind: "item", item: i })}
+      />
     </li>
   );
   const empty = !agenda.overdue.length && !agenda.bars.length && !agenda.timed.length && !agenda.untimed.length;
@@ -79,7 +121,13 @@ export function AgendaPanel({
           <ul className="rows">
             {agenda.overdue.map((item) => (
               <li key={item.id}>
-                <ItemRow item={item} now={now} list={lists[item.list_id]} onOpen={handlers.onItem} />
+                <ItemRow
+                  item={item}
+                  now={now}
+                  list={lists[item.list_id]}
+                  onTap={handlers.onItem}
+                  onMenu={(e, i) => handlers.onMenu(e, { kind: "item", item: i })}
+                />
               </li>
             ))}
           </ul>
@@ -91,9 +139,9 @@ export function AgendaPanel({
         {agenda.bars.map((b) => (
           <li key={b.kind === "event" ? `${b.occurrence.event_id}:${b.occurrence.occurrence_date}` : b.event.id}>
             {b.kind === "event" ? (
-              <EventRow occurrence={b.occurrence} onEvent={handlers.onEvent} />
+              <EventRow occurrence={b.occurrence} handlers={handlers} />
             ) : (
-              <ExternalRow event={b.event} onExternal={handlers.onExternal} />
+              <ExternalRow event={b.event} handlers={handlers} />
             )}
           </li>
         ))}
@@ -103,9 +151,9 @@ export function AgendaPanel({
           ) : (
             <li key={t.kind === "event" ? `${t.occurrence.event_id}:${t.occurrence.occurrence_date}` : t.event.id}>
               {t.kind === "event" ? (
-                <EventRow occurrence={t.occurrence} onEvent={handlers.onEvent} />
+                <EventRow occurrence={t.occurrence} handlers={handlers} />
               ) : (
-                <ExternalRow event={t.event} onExternal={handlers.onExternal} />
+                <ExternalRow event={t.event} handlers={handlers} />
               )}
             </li>
           ),

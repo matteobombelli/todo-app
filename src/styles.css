@@ -1,21 +1,29 @@
 :root {
   color-scheme: light dark;
 
+  /* Apple's system colours: label, secondary label, tint, separator, grouped background. */
   --bg: #ffffff;
-  --fg: #1b1b1f;
-  --muted: #6b6b76;
-  --accent: #3b6fd6;
-  --border: #e1e1e8;
-  --danger: #c93c3c;
-  --surface: #f4f4f8;
-  --scrim: rgba(20, 20, 40, 0.45);
+  --fg: #000000;
+  --muted: #8a8a8e;
+  --accent: #007aff;
+  --border: #d1d1d6;
+  --danger: #ff3b30;
+  --surface: #f2f2f7;
+  /* Sheets and dialogs: white on light, a raised grey on dark. */
+  --elevated: #ffffff;
+  /* Fills behind fields, segmented controls and pressed rows. */
+  --fill: rgba(118, 118, 128, 0.12);
+  /* Translucent bars and menus, blurred over what's behind them. */
+  --material: rgba(255, 255, 255, 0.78);
+  --scrim: rgba(0, 0, 0, 0.25);
   /* Text on palette fills. */
   --on-color: #ffffff;
 
-  --radius: 12px;
+  --radius: 10px;
   --stroke: 1.5px;
-  --shadow: 0 1px 3px rgba(20, 20, 40, 0.12);
-  --shadow-hover: 0 8px 20px rgba(20, 20, 40, 0.16);
+  --hairline: 0.5px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
 
   /* Motion: shared durations, so everything that moves together stays in step. */
   --fast: 160ms;
@@ -26,18 +34,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17171b;
-    --fg: #ececf1;
-    --muted: #9a9aa6;
-    --accent: #7fa6f0;
-    --border: #33333d;
-    --danger: #ef7474;
-    --surface: #212128;
-    --scrim: rgba(0, 0, 0, 0.6);
-    --on-color: #121216;
+    --bg: #000000;
+    --fg: #ffffff;
+    --muted: #8d8d93;
+    --accent: #0a84ff;
+    --border: #38383a;
+    --danger: #ff453a;
+    --surface: #1c1c1e;
+    --elevated: #1c1c1e;
+    --fill: rgba(118, 118, 128, 0.24);
+    --material: rgba(30, 30, 32, 0.78);
+    --scrim: rgba(0, 0, 0, 0.5);
+    --on-color: #ffffff;
 
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-    --shadow-hover: 0 8px 20px rgba(0, 0, 0, 0.5);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
   }
 }
 
@@ -56,7 +67,9 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 16px/1.5 "Figtree Variable", system-ui, sans-serif;
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -111,7 +124,7 @@ a {
   white-space: nowrap;
 }
 
-/* Controls */
+/* Controls: borderless, filled fields and tinted buttons. Presses dim rather than move. */
 
 button,
 input,
@@ -120,64 +133,58 @@ textarea,
 .button-link {
   font: inherit;
   color: inherit;
-  background: var(--bg);
-  border: var(--stroke) solid var(--border);
+  background: var(--fill);
+  border: 0;
   border-radius: var(--radius);
-  padding: 0.45rem 0.7rem;
+  padding: 0.55rem 0.8rem;
   transition:
-    border-color var(--fast) var(--ease-out),
     background var(--fast) var(--ease-out),
     color var(--fast) var(--ease-out),
     box-shadow var(--fast) var(--ease-out),
-    transform var(--fast) var(--ease-spring);
+    opacity var(--fast) var(--ease-out);
 }
 
 button,
 .button-link {
-  background: var(--surface);
+  color: var(--accent);
+  font-weight: 500;
   cursor: pointer;
-}
-
-button:hover:not(:disabled),
-.button-link:hover {
-  border-color: var(--accent);
 }
 
 button:active:not(:disabled),
 .button-link:active {
-  transform: scale(0.96);
+  opacity: 0.55;
 }
 
 button:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.4;
 }
 
 .button--primary {
   background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
+  color: #ffffff;
+  font-weight: 600;
 }
 
 .button--secondary {
   background: transparent;
-  color: var(--muted);
 }
 
 .button--danger {
   background: transparent;
-  border-color: transparent;
   color: var(--danger);
-}
-
-.button--danger:hover:not(:disabled) {
-  border-color: var(--danger);
 }
 
 .button--danger-solid {
   background: var(--danger);
-  border-color: var(--danger);
-  color: var(--bg);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.button--plain {
+  padding: 0.35rem 0.5rem;
+  background: transparent;
 }
 
 .button--icon,
@@ -193,13 +200,13 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: var(--stroke) solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 :is(input:not([type="checkbox"]), select, textarea):focus-visible {
-  border-color: var(--accent);
   outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 /* Checkbox: the native input sits invisibly on top of the drawn box, so it keeps its semantics. */
@@ -225,9 +232,9 @@ button:disabled {
 .check__box {
   display: grid;
   place-items: center;
-  border: var(--stroke) solid var(--muted);
+  border: var(--stroke) solid color-mix(in srgb, var(--muted) 70%, transparent);
   border-radius: 6px;
-  color: var(--bg);
+  color: #ffffff;
   transition:
     background var(--fast) var(--ease-out),
     border-color var(--fast) var(--ease-out),
@@ -257,8 +264,19 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* Items: a Reminders circle that fills with the list's colour inside a ring, no tick. */
 .item .check__box {
   border-radius: 50%;
+}
+
+.item .check__box svg {
+  display: none;
+}
+
+.item .check__input:checked + .check__box {
+  border-color: var(--list, var(--accent));
+  background: var(--list, var(--accent));
+  box-shadow: inset 0 0 0 0.2rem var(--bg);
 }
 
 .icon-btn {
@@ -271,22 +289,21 @@ button:disabled {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--muted);
+  color: var(--accent);
   cursor: pointer;
   transition:
     background var(--fast) var(--ease-out),
     color var(--fast) var(--ease-out),
-    transform var(--fast) var(--ease-spring);
+    opacity var(--fast) var(--ease-out);
 }
 
 .icon-btn:hover,
 .icon-btn:focus-visible {
-  background: var(--surface);
-  color: var(--fg);
+  background: var(--fill);
 }
 
 .icon-btn:active:not(:disabled) {
-  transform: scale(0.9);
+  opacity: 0.55;
 }
 
 /* Tooltip from the label, for pointers that hover. Shows late, hides at once. */
@@ -295,7 +312,8 @@ button:disabled {
     position: relative;
   }
 
-  .icon-btn::after {
+  /* Row kebabs say which row in their label; the tooltip would only repeat the title. */
+  .icon-btn:not(.row__kebab)::after {
     content: attr(aria-label);
     position: absolute;
     top: calc(100% + 6px);
@@ -327,27 +345,26 @@ button:disabled {
   }
 }
 
+/* A due date: quiet secondary text, red once overdue. */
 .chip {
   display: inline-flex;
   align-items: center;
   flex: none;
-  padding: 0 0.45rem;
-  border: var(--stroke) solid var(--border);
-  border-radius: 999px;
   color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.6;
+  font-size: 0.8125rem;
   white-space: nowrap;
 }
 
 .chip--overdue {
-  border-color: var(--danger);
   color: var(--danger);
 }
 
 .chip--std {
-  border-color: var(--std);
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--std) 16%, transparent);
   color: var(--std);
+  font-weight: 500;
 }
 
 .dot {
@@ -433,6 +450,13 @@ button:disabled {
   }
 }
 
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
 @keyframes pop {
   from {
     transform: scale(0.8);
@@ -490,12 +514,16 @@ button:disabled {
   align-items: center;
   gap: 0.5rem;
   padding: env(safe-area-inset-top) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
-  min-height: calc(3rem + env(safe-area-inset-top));
-  border-bottom: var(--stroke) solid var(--border);
+  min-height: calc(2.75rem + env(safe-area-inset-top));
+  border-bottom: var(--hairline) solid var(--border);
+  background: var(--material);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
 }
 
 .app-header__brand {
   font-weight: 600;
+  font-size: 1.0625rem;
 }
 
 .app-header__end {
@@ -568,12 +596,11 @@ button:disabled {
   transition:
     color var(--fast) var(--ease-out),
     background var(--fast) var(--ease-out),
-    box-shadow var(--fast) var(--ease-out),
-    transform var(--fast) var(--ease-spring);
+    opacity var(--fast) var(--ease-out);
 }
 
 .tab:active {
-  transform: scale(0.94);
+  opacity: 0.55;
 }
 
 .tab.active {
@@ -592,26 +619,23 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  border-top: var(--stroke) solid var(--border);
+  border-top: var(--hairline) solid var(--border);
+  background: var(--material);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
 }
 
 .tabs--bottom .tab {
   flex-direction: column;
-  gap: 0.1rem;
-  padding: 0.4rem;
-  font-size: 0.75rem;
+  gap: 0.15rem;
+  padding: 0.45rem 0.4rem 0.3rem;
+  font-size: 0.625rem;
+  font-weight: 500;
 }
 
-/* The active tab's icon sits in a pill. */
 .tabs--bottom .tab svg {
-  box-sizing: content-box;
-  padding: 0.2rem 1rem;
-  border-radius: 999px;
-  transition: background var(--medium) var(--ease-out);
-}
-
-.tabs--bottom .tab.active svg {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 @media (min-width: 720px) {
@@ -621,8 +645,12 @@ button:disabled {
     margin-left: 1rem;
   }
 
+  .tabs--top .tab {
+    padding: 0.3rem 0.75rem;
+  }
+
   .tabs--top .tab.active {
-    background: var(--surface);
+    background: var(--fill);
   }
 
   .tabs--bottom {
@@ -642,7 +670,7 @@ button:disabled {
     gap: 0.25rem;
     width: 16rem;
     padding: max(1rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
-    border-right: var(--stroke) solid var(--border);
+    border-right: var(--hairline) solid var(--border);
     background: var(--surface);
   }
 
@@ -654,7 +682,8 @@ button:disabled {
 
 .sidebar__brand {
   padding: 0 0.5rem 0.75rem;
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 700;
 }
 
 .tabs--side {
@@ -672,10 +701,8 @@ button:disabled {
 
 .sidebar__heading h2 {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .sidebar__lists {
@@ -688,13 +715,17 @@ button:disabled {
   min-height: 2.25rem;
 }
 
-.sidebar :is(.tab, .row--link):hover,
-.sidebar :is(.tab, .row--link).active {
-  background: var(--bg);
+.sidebar :is(.tab, .row--link):hover {
+  background: var(--fill);
 }
 
 .sidebar :is(.tab, .row--link).active {
-  box-shadow: var(--shadow);
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  color: var(--fg);
+}
+
+.sidebar .tab.active {
+  color: var(--accent);
 }
 
 .sidebar__footer {
@@ -702,7 +733,7 @@ button:disabled {
   align-items: center;
   gap: 0.25rem;
   padding-top: 0.5rem;
-  border-top: var(--stroke) solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .sidebar__user {
@@ -722,20 +753,35 @@ button:disabled {
   width: 100%;
   max-width: 44rem;
   margin: 0 auto;
-  padding: 1rem max(1rem, env(safe-area-inset-right)) 2rem max(1rem, env(safe-area-inset-left));
+  padding: 0.5rem max(1rem, env(safe-area-inset-right)) 2rem max(1rem, env(safe-area-inset-left));
 }
 
-.page__header {
+/* A navigation bar's buttons, over a large title, as on iOS. */
+.nav-bar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  margin: 0 -0.5rem;
 }
 
-.page__header h1 {
-  flex: 1;
-  min-width: 0;
+.nav-bar__end {
+  margin-left: auto;
+}
+
+.nav-bar .icon-btn svg {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+.large-title {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 2.125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
   overflow-wrap: anywhere;
+  color: var(--list, var(--fg));
 }
 
 /* Swiped horizontally by useSwipe; vertical pans still scroll. It fills the main area so a swipe
@@ -792,6 +838,7 @@ button:disabled {
   border-radius: var(--radius);
   background: transparent;
   color: inherit;
+  font-weight: 400;
   text-align: left;
   transition:
     background var(--fast) var(--ease-out),
@@ -803,14 +850,16 @@ button:disabled {
   text-decoration: none;
 }
 
-:is(.row--link, button.row):hover {
-  background: var(--surface);
+@media (hover: hover) {
+  :is(.row--link, button.row):hover {
+    background: var(--fill);
+  }
 }
 
+/* Pressed: the row greys, as a table cell highlights. */
 :is(.row--link, button.row):active,
-.item:has(.item__body:active) {
-  transform: scale(0.98);
-  background: var(--surface);
+.row:has(> .item__body:active) {
+  background: var(--fill);
 }
 
 /* A row lifted by a long-press drag (useSortable, useDropOnto), above its neighbours, and the row
@@ -822,7 +871,7 @@ button:disabled {
 
 /* The second selector outranks the pressed state of an item still under the finger. */
 .drag--lifted .row,
-.drag--lifted .item:has(.item__body:active) {
+.drag--lifted .row:has(> .item__body:active) {
   background: var(--bg);
   box-shadow: var(--shadow-hover);
   transform: scale(1.03);
@@ -830,7 +879,7 @@ button:disabled {
 
 /* Dropping onto a row: the lifted one shrinks so the target's outline shows around it. */
 .drag--floating .row,
-.drag--floating .item:has(.item__body:active) {
+.drag--floating .row:has(> .item__body:active) {
   transform: scale(0.92);
 }
 
@@ -839,35 +888,56 @@ button:disabled {
   box-shadow: inset 0 0 0 var(--stroke) var(--accent);
 }
 
-/* The todo tab's lists and items: roomier than the sidebar and agenda, with a divider between rows. */
+/* The todo tab's lists and items: roomier than the sidebar and agenda, with a hairline between rows
+   that starts at the text, as in an inset table. */
 .rows--large {
+  --inset: 2.75rem;
   gap: 0;
 }
 
-.rows--large > li + li {
-  border-top: 1px solid var(--border);
+.rows--large > li {
+  position: relative;
+}
+
+.rows--large > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--inset);
+  right: 0;
+  border-top: var(--hairline) solid var(--border);
   transition: border-color var(--medium) var(--ease-out);
 }
 
+/* Lists: the text starts after a colour dot, not a checkbox. */
+.rows--large:has(> li > .row--link) {
+  --inset: 2.1rem;
+}
+
 /* A folded-away subtask: its divider goes with it. */
-.rows--large > li.rows__hidden {
+.rows--large > li.rows__hidden::before {
   border-top-color: transparent;
 }
 
 .rows--large .row {
   gap: 0.75rem;
-  min-height: 3.25rem;
-  padding: 0.5rem 0.75rem;
+  min-height: 2.875rem;
+  padding: 0.375rem 0.25rem 0.375rem 0.5rem;
+  border-radius: 0;
   font-size: 1.0625rem;
 }
 
+.rows--large .row--link {
+  border-radius: var(--radius);
+}
+
 .rows--large .item--subtask {
-  padding-left: 3rem;
+  padding-left: 2.75rem;
 }
 
 .rows--large .check {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.375rem;
+  height: 1.375rem;
 }
 
 .rows--large .dot {
@@ -884,7 +954,7 @@ button:disabled {
 .row__meta {
   flex: none;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -894,7 +964,7 @@ button:disabled {
 }
 
 .row__chevron {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
 }
 
 .item__body {
@@ -903,10 +973,26 @@ button:disabled {
   gap: 0.5rem;
   flex: 1;
   min-width: 0;
-  padding: 0.35rem 0;
+  align-self: stretch;
+  padding: 0.25rem 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
+  color: inherit;
+  font-weight: 400;
   text-align: left;
+}
+
+button.item__body {
+  cursor: text;
+}
+
+.item__body:active:not(:disabled) {
+  opacity: 1;
+}
+
+.agenda-event button.item__body {
+  cursor: pointer;
 }
 
 .item__fold {
@@ -927,8 +1013,22 @@ button:disabled {
   transform: rotate(90deg);
 }
 
-.item__body:active:not(:disabled) {
-  transform: none;
+/* A row's actions. Pointers that hover see it on the row under them; touch always shows it. */
+.row__kebab {
+  width: 2rem;
+  height: 2rem;
+  color: var(--muted);
+}
+
+@media (hover: hover) {
+  .row__kebab {
+    opacity: 0;
+  }
+
+  .row:hover .row__kebab,
+  .row:focus-within .row__kebab {
+    opacity: 1;
+  }
 }
 
 /* The strike-through fades in rather than snapping on. */
@@ -944,12 +1044,46 @@ button:disabled {
   text-decoration-color: currentColor;
 }
 
-.add-row {
-  margin-bottom: 0.75rem;
+/* The row a new item is typed into: an empty circle and a bare field. */
+.item__input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0;
+  border-radius: 0;
+  background: transparent;
 }
 
-.add-row input {
+.item--draft .item__input:focus-visible {
+  box-shadow: none;
+}
+
+/* Below the rows: a tap starts a new item at the end. With no open items it shows as one. */
+.rows__tail {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   width: 100%;
+  min-height: 2.875rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.0625rem;
+  font-weight: 400;
+  cursor: text;
+}
+
+.rows__tail:active:not(:disabled) {
+  opacity: 1;
+}
+
+.rows__tail .check {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+.rows__tail .check__box {
+  border-radius: 50%;
 }
 
 .completed {
@@ -973,6 +1107,100 @@ button:disabled {
 
 .section-toggle[aria-expanded="true"] .section-toggle__chevron {
   transform: rotate(90deg);
+}
+
+/* Context menus (Menu.tsx): a frosted panel that grows from where it was opened. */
+.menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 15rem;
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100dvh - 1rem);
+  overflow-y: auto;
+  padding: 0.375rem;
+  border-radius: 14px;
+  background: var(--material);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
+  box-shadow: var(--shadow-hover);
+  animation: menu-in 220ms var(--ease-spring);
+  transition:
+    opacity var(--fast) var(--ease-out),
+    transform var(--fast) var(--ease-out);
+}
+
+.menu--closing {
+  opacity: 0;
+  transform: scale(0.95);
+  pointer-events: none;
+}
+
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 1.0625rem;
+  font-weight: 400;
+  text-align: left;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menu__item {
+    min-height: 2.125rem;
+    padding: 0.3rem 0.625rem;
+    font-size: 0.9375rem;
+  }
+}
+
+.menu__item:hover,
+.menu__item:focus-visible {
+  outline: none;
+  background: var(--fill);
+}
+
+.menu__item:active:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--fg) 14%, transparent);
+}
+
+.menu__item--destructive {
+  color: var(--danger);
+}
+
+.menu__item--back {
+  gap: 0.25rem;
+  padding-left: 0.375rem;
+  font-weight: 600;
+}
+
+.menu__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.25rem;
+}
+
+.menu__separator {
+  height: var(--hairline);
+  margin: 0.375rem 0.625rem;
+  background: var(--border);
 }
 
 /* Height animation: the single grid row goes from its content's height to nothing. */
@@ -1016,9 +1244,9 @@ button:disabled {
 }
 
 .field__label {
+  padding: 0 0.25rem;
   color: var(--muted);
-  font-size: 0.8rem;
-  padding: 0;
+  font-size: 0.8125rem;
 }
 
 .field__hint {
@@ -1091,7 +1319,7 @@ button:disabled {
 .color-picker__swatch[aria-checked="true"] {
   box-shadow:
     0 0 0 2px var(--bg),
-    0 0 0 4px var(--fg);
+    0 0 0 4px var(--muted);
 }
 
 .weekday-picker {
@@ -1106,10 +1334,13 @@ button:disabled {
   border-radius: 50%;
 }
 
+.weekday-picker button {
+  color: var(--fg);
+}
+
 .weekday-picker button[aria-pressed="true"] {
   background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
+  color: #ffffff;
 }
 
 .details {
@@ -1142,9 +1373,8 @@ button:disabled {
   max-width: 20rem;
   gap: 0.75rem;
   padding: 1.5rem;
-  border: var(--stroke) solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  border-radius: 16px;
+  background: var(--surface);
   animation: rise-in var(--medium) var(--ease-out);
 }
 
@@ -1182,9 +1412,8 @@ button:disabled {
   width: 30rem;
   max-width: 100%;
   max-height: 100%;
-  background: var(--bg);
-  border: var(--stroke) solid var(--border);
-  border-radius: var(--radius);
+  background: var(--elevated);
+  border-radius: 14px;
   box-shadow: var(--shadow-hover);
   animation: modal-in var(--medium) var(--ease-out);
   transition:
@@ -1201,8 +1430,21 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.6rem 0.5rem 1rem;
-  border-bottom: var(--stroke) solid var(--border);
+  padding: 0.75rem 0.75rem 0.25rem 1.25rem;
+}
+
+/* The close button: a small grey disc, as on iOS sheets. */
+.modal__header .icon-btn {
+  width: 1.875rem;
+  height: 1.875rem;
+  background: var(--fill);
+  color: var(--muted);
+}
+
+.modal__header .icon-btn svg {
+  width: 1rem;
+  height: 1rem;
+  stroke-width: 2.5;
 }
 
 .modal__handle {
@@ -1218,8 +1460,7 @@ button:disabled {
   .modal {
     width: 100%;
     padding-bottom: env(safe-area-inset-bottom);
-    border-bottom: 0;
-    border-radius: 16px 16px 0 0;
+    border-radius: 14px 14px 0 0;
     animation: sheet-up var(--medium) var(--ease-out);
   }
 
@@ -1243,9 +1484,9 @@ button:disabled {
     top: 0.4rem;
     left: 50%;
     width: 2.25rem;
-    height: 0.3rem;
+    height: 0.3125rem;
     border-radius: 999px;
-    background: var(--border);
+    background: color-mix(in srgb, var(--muted) 50%, transparent);
     translate: -50% 0;
   }
 }
@@ -1268,15 +1509,15 @@ button:disabled {
 
 .modal__title {
   flex: 1;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
 .modal__body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 1rem;
+  padding: 0.75rem 1.25rem 1.25rem;
 }
 
 /* Calendar */
@@ -1310,6 +1551,9 @@ button:disabled {
 
 .cal-header__title {
   flex: 1 1 100%;
+  font-size: 2.125rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 /* Phones: the add button shares the title's line, the nav and view switcher get the next. */
@@ -1331,8 +1575,9 @@ button:disabled {
 }
 
 .cal-header__nav button:not(.icon-btn) {
-  padding: 0.25rem 0.7rem;
-  font-size: 0.875rem;
+  padding: 0.25rem 0.6rem;
+  background: transparent;
+  color: var(--danger);
 }
 
 @media (min-width: 720px) {
@@ -1352,10 +1597,11 @@ button:disabled {
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   padding: 2px;
-  border: var(--stroke) solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 9px;
+  background: var(--fill);
 }
 
+/* The raised thumb: white on light, a lighter grey on dark. */
 .segmented::before {
   content: "";
   position: absolute;
@@ -1363,24 +1609,34 @@ button:disabled {
   bottom: 2px;
   left: 2px;
   width: calc((100% - 4px) / var(--count));
-  border-radius: calc(var(--radius) - 3px);
-  background: var(--surface);
+  border-radius: 7px;
+  background: var(--bg);
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.12),
+    0 3px 1px rgba(0, 0, 0, 0.04);
   transform: translateX(calc(var(--index) * 100%));
   transition: transform var(--medium) var(--ease-spring);
 }
 
+@media (prefers-color-scheme: dark) {
+  .segmented::before {
+    background: #636366;
+  }
+}
+
 .segmented button {
   position: relative;
-  padding: 0.25rem 0.6rem;
+  padding: 0.2rem 0.75rem;
   border: 0;
-  border-radius: calc(var(--radius) - 3px);
+  border-radius: 7px;
   background: transparent;
-  color: var(--muted);
-  font-size: 0.875rem;
+  color: var(--fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
 .segmented button[aria-checked="true"] {
-  color: var(--fg);
+  font-weight: 600;
 }
 
 /* The track is swiped by useSwipe. It holds the current period (month, week, day) with its
@@ -1435,7 +1691,7 @@ button:disabled {
 }
 
 .month {
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--hairline) solid var(--border);
 }
 
 .month__weekdays,
@@ -1455,7 +1711,7 @@ button:disabled {
    all rows underneath the bars, which ignore the pointer so a tap anywhere selects the day. */
 .month__week {
   grid-template-rows: 2.4rem repeat(3, 1.15rem) 1rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .month__day {
@@ -1468,20 +1724,29 @@ button:disabled {
   border: 0;
   border-radius: 0;
   background: transparent;
+  color: var(--fg);
+  font-weight: 400;
 }
 
-.month__day:hover:not(:disabled) {
-  background: var(--surface);
+.month__day:active:not(:disabled) {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .month__day:hover:not(:disabled) {
+    background: var(--fill);
+  }
 }
 
 .month__day[aria-selected="true"] .month__num {
   animation: pop var(--medium) var(--ease-spring);
 }
 
-.month__day[aria-selected="true"] {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-  border-radius: 6px;
+/* Selected: a filled disc, red when it's today, as in Calendar. */
+.month__day[aria-selected="true"] .month__num {
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 600;
 }
 
 .month__day--outside {
@@ -1491,17 +1756,21 @@ button:disabled {
 .month__num {
   display: grid;
   place-items: center;
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: 50%;
-  font-size: 0.85rem;
+  font-size: 0.9375rem;
   font-variant-numeric: tabular-nums;
 }
 
 .month__day--today .month__num {
-  background: var(--accent);
-  color: var(--bg);
+  color: var(--danger);
   font-weight: 600;
+}
+
+.month__day--today[aria-selected="true"] .month__num {
+  background: var(--danger);
+  color: #ffffff;
 }
 
 .month__dots {
@@ -1543,13 +1812,14 @@ button:disabled {
 }
 
 .agenda__date {
-  font-size: 1rem;
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
 .agenda__heading {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .agenda__heading--overdue {
@@ -1570,8 +1840,7 @@ button:disabled {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-top: var(--hairline) solid var(--border);
   overflow: hidden;
 }
 
@@ -1583,7 +1852,7 @@ button:disabled {
 }
 
 .tgrid__head {
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--hairline) solid var(--border);
 }
 
 .tgrid__dayhead {
@@ -1594,6 +1863,7 @@ button:disabled {
   border: 0;
   border-radius: 0;
   background: transparent;
+  color: var(--fg);
   line-height: 1.2;
 }
 
@@ -1607,7 +1877,7 @@ button:disabled {
 }
 
 .tgrid__dayhead--today .tgrid__num {
-  color: var(--accent);
+  color: var(--danger);
 }
 
 .tgrid__allday {
@@ -1615,7 +1885,7 @@ button:disabled {
   min-height: 1.5rem;
   max-height: 30%;
   overflow-y: auto;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--hairline) solid var(--border);
 }
 
 .tgrid__gutter-label {
@@ -1631,6 +1901,7 @@ button:disabled {
 .tgrid__block {
   border: 0;
   color: var(--on-color);
+  font-weight: 400;
   font-size: 0.72rem;
   line-height: 1.25;
   text-align: left;
@@ -1660,7 +1931,9 @@ button:disabled {
   border-left: 3px solid;
   border-radius: 4px;
   background: var(--surface);
+  color: var(--fg);
   font-size: 0.68rem;
+  font-weight: 400;
   line-height: 1.5;
   text-align: left;
   white-space: nowrap;
@@ -1701,8 +1974,8 @@ button:disabled {
 
 .tgrid__col {
   position: relative;
-  border-left: 1px solid var(--border);
-  background-image: repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px var(--hour));
+  border-left: var(--hairline) solid var(--border);
+  background-image: repeating-linear-gradient(to bottom, var(--border) 0 0.5px, transparent 0.5px var(--hour));
 }
 
 .tgrid__block {
@@ -1765,9 +2038,10 @@ button:disabled {
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0.5rem 0.5rem 1rem;
-  border: var(--stroke) solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
+  border-radius: 14px;
+  background: var(--material);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
   box-shadow: var(--shadow-hover);
   transform: translateX(-50%);
   white-space: nowrap;

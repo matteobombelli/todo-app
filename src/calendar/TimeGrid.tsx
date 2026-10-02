@@ -106,6 +106,7 @@ export function TimeGrid({
               className="tgrid__bar"
               style={{ ...style, backgroundColor: paletteVar(b.item.occurrence.color) }}
               onClick={() => b.item.kind === "event" && handlers.onEvent(b.item.occurrence)}
+              onContextMenu={(e) => b.item.kind === "event" && handlers.onMenu(e, { kind: "event", occurrence: b.item.occurrence })}
             >
               {b.item.occurrence.title}
             </button>
@@ -116,6 +117,7 @@ export function TimeGrid({
               className={`tgrid__bar${b.item.event.status === "proposed" ? " hatched" : ""}`}
               style={{ ...style, backgroundColor: STD_COLOR }}
               onClick={() => b.item.kind === "external" && handlers.onExternal(b.item.event)}
+              onContextMenu={(e) => b.item.kind === "external" && handlers.onMenu(e, { kind: "external", event: b.item.event })}
             >
               {b.item.event.title}
             </button>
@@ -133,6 +135,7 @@ export function TimeGrid({
                   className={`tgrid__item${item.completed_at !== null ? " tgrid__item--done" : ""}`}
                   style={{ borderColor: paletteVar(lists[item.list_id]?.color ?? "gray") }}
                   onClick={() => handlers.onItem(item)}
+                  onContextMenu={(e) => handlers.onMenu(e, { kind: "item", item })}
                 >
                   {item.title}
                 </button>
@@ -170,6 +173,7 @@ export function TimeGrid({
                       className="tgrid__block"
                       style={{ ...style, backgroundColor: paletteVar(o.color) }}
                       onClick={() => handlers.onEvent(o)}
+                      onContextMenu={(e) => handlers.onMenu(e, { kind: "event", occurrence: o })}
                     >
                       <span className="tgrid__block-title">{o.title}</span>
                       <span className="tgrid__block-time">{formatTime(o.start_time!)}</span>
@@ -183,6 +187,7 @@ export function TimeGrid({
                     className={`tgrid__block${item.event.status === "proposed" ? " hatched" : ""}`}
                     style={{ ...style, backgroundColor: STD_COLOR }}
                     onClick={() => handlers.onExternal(item.event)}
+                    onContextMenu={(e) => handlers.onMenu(e, { kind: "external", event: item.event })}
                   >
                     <span className="tgrid__block-title">{item.event.title}</span>
                     <span className="tgrid__block-time">{formatTime(item.event.start_time!)}</span>
@@ -198,6 +203,7 @@ export function TimeGrid({
                     className={`tgrid__marker${item.completed_at !== null ? " tgrid__item--done" : ""}`}
                     style={{ top: (toMinutes(item.due_time!) / 60) * HOUR_PX, borderColor: paletteVar(lists[item.list_id]?.color ?? "gray") }}
                     onClick={() => handlers.onItem(item)}
+                    onContextMenu={(e) => handlers.onMenu(e, { kind: "item", item })}
                   >
                     {formatTime(item.due_time!)} {item.title}
                   </button>

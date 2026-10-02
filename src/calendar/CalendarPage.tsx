@@ -1,19 +1,24 @@
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Info, Pencil, Plus, Trash2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router";
 import type { ExternalEvent } from "../../shared/agenda";
 import { addDays, daysInMonth, isDate, makeDate, weekStart } from "../../shared/dates";
 import type { Item, List } from "../../shared/entities";
 import type { Occurrence } from "../../shared/recurrence";
+import { STD_APP_URL } from "../../shared/std";
+import { useConfirm } from "../components/ConfirmDialog";
 import { isSliding, resetSlide, slide, useShortcuts, useSwipe } from "../components/gestures";
 import { IconButton } from "../components/IconButton";
+import { useMenu, type MenuEntry } from "../components/Menu";
 import type { Now } from "../../shared/items";
-import { useData, useNow } from "../data/hooks";
+import { useData, useLists, useNow } from "../data/hooks";
 import { formatDayMonth, formatLongDate, formatMonthYear } from "../format";
 import { ItemEditor } from "../todo/ItemEditor";
-import { AgendaPanel, type CalendarHandlers } from "./AgendaPanel";
+import { itemMenu } from "../todo/itemMenu";
+import { AgendaPanel, type CalendarHandlers, type CalendarTarget } from "./AgendaPanel";
 import { useOccurrences, useStdDates } from "./data";
-import { EventEditor } from "./EventEditor";
+import { EventEditor, ScopeDialog } from "./EventEditor";
+import { deleteEvent } from "./eventActions";
 import { monthWeeks } from "./layout";
 import { MonthView } from "./MonthView";
 import { StdSheet } from "./StdSheet";
@@ -136,7 +141,12 @@ export default function CalendarPage() {
   const [editing, setEditing] = useState<Editing | null>(null);
   const track = useRef<HTMLDivElement>(null);
   const { items, lists } = useData().tables;
+  const allLists = useLists();
   const itemList = useMemo(() => Object.values(items), [items]);
+  const [menu, showMenu] = useMenu();
+  const [confirmDialog, confirm] = useConfirm();
+  // A recurring event being deleted, waiting for "this event or all".
+  const [deleting, setDeleting] = useState<Occurrence | null>(null);
 
   const go = (next: { view?: View; date?: string }) =>
     setParams({ view: next.view ?? view, date: next.date ?? date }, { replace: true });
@@ -173,7 +183,36 @@ export default function CalendarPage() {
     onEvent: (occurrence) => setEditing({ kind: "event", occurrence }),
     onExternal: (event) => setEditing({ kind: "external", event }),
     onItem: (item) => setEditing({ kind: "item", item }),
+    onMenu: (e, target) => showMenu(e, entryMenu(target)),
   };
+
+  function entryMenu(target: CalendarTarget): MenuEntry[] {
+    if (target.kind === "item") {
+      return itemMenu(target.item, { lists: allLists, items, onEdit: (item) => setEditing({ kind: "item", item }), confirm });
+    }
+    if (target.kind === "external") {
+      const { event } = target;
+      return [
+        { label: "Details", icon: Info, onSelect: () => setEditing({ kind: "external", event }) },
+        { label: "Open Save the Date", icon: ExternalLink, onSelect: () => window.open(STD_APP_URL, "_blank", "noreferrer") },
+      ];
+    }
+    const { occurrence } = target;
+    return [
+      { label: "Edit Event", icon: Pencil, onSelect: () => setEditing({ kind: "event", occurrence }) },
+      "separator",
+      {
+        label: "Delete Event",
+        icon: Trash2,
+        destructive: true,
+        onSelect: () =>
+          void (async () => {
+            if (occurrence.recurring) setDeleting(occurrence);
+            else if (await confirm("Delete event?", `"${occurrence.title}" will be deleted.`, "Delete")) await deleteEvent(occurrence, "series");
+          })(),
+      },
+    ];
+  }
 
   return (
     <div className={`page page--calendar page--${view}`}>
@@ -226,6 +265,9 @@ export default function CalendarPage() {
       {editing?.kind === "event" && <EventEditor occurrence={editing.occurrence} date={date} onClose={() => setEditing(null)} />}
       {editing?.kind === "item" && <ItemEditor item={editing.item} onClose={() => setEditing(null)} />}
       {editing?.kind === "external" && <StdSheet event={editing.event} onClose={() => setEditing(null)} />}
+      {deleting && <ScopeDialog verb="Delete" onPick={(scope) => void deleteEvent(deleting, scope)} onClose={() => setDeleting(null)} />}
+      {menu}
+      {confirmDialog}
     </div>
   );
 }
