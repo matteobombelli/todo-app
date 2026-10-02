@@ -638,6 +638,18 @@ button:disabled {
   height: 1.5rem;
 }
 
+/* Dark mode: the frosted grey stood out against the black page. The header takes the page colour;
+   the tab bar sits halfway between its old grey (the material over black, #171719) and black. */
+@media (prefers-color-scheme: dark) {
+  .app-header {
+    background: var(--bg);
+  }
+
+  .tabs--bottom {
+    background: #0c0c0d;
+  }
+}
+
 @media (min-width: 720px) {
   .tabs--top {
     display: flex;
