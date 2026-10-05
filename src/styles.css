@@ -1754,7 +1754,7 @@ button.item__body {
   animation: pop var(--medium) var(--ease-spring);
 }
 
-/* Selected: a filled disc, red when it's today, as in Calendar. */
+/* Selected: a filled disc. Today keeps its red disc whether or not it's selected. */
 .month__day[aria-selected="true"] .month__num {
   background: var(--fg);
   color: var(--bg);
@@ -1776,13 +1776,9 @@ button.item__body {
 }
 
 .month__day--today .month__num {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-.month__day--today[aria-selected="true"] .month__num {
   background: var(--danger);
   color: #ffffff;
+  font-weight: 600;
 }
 
 .month__dots {
