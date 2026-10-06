@@ -7,18 +7,16 @@ export const STD_TEST_TOKEN = "test-std-token";
 export const STD_TEST_CODE = "test-connect-code";
 
 export const STD_ROWS = [
-  { id: 1, title: "Picnic", description: "Park", event_date: "2026-09-20", event_time: "12:30", location: "Golden Gate Park", maps_url: null, duration: null, proposee: "Hailey", status: "upcoming", created_at: "2026-09-01 10:00:00", cover_image_id: null, note_hailey: null, note_matteo: null },
-  { id: 2, title: "Tahoe trip", description: "Cabin", event_date: "2026-09-25", event_time: null, location: null, maps_url: null, duration: 3, proposee: "Matteo", status: "proposed", created_at: "2026-09-02 10:00:00", cover_image_id: 7, note_hailey: null, note_matteo: null },
-  { id: 3, title: "Old dinner", description: "Sushi", event_date: "2026-08-01", event_time: "19:00", location: null, maps_url: null, duration: null, proposee: "Matteo", status: "saved", created_at: "2026-07-01 10:00:00", cover_image_id: null, note_hailey: null, note_matteo: null },
-  { id: 4, title: "Someday", description: "Undated", event_date: null, event_time: null, location: null, maps_url: null, duration: null, proposee: "Hailey", status: "proposed", created_at: "2026-07-01 10:00:00", cover_image_id: null, note_hailey: null, note_matteo: null },
+  { id: 1, title: "Picnic", description: "Park", event_date: "2026-09-20", event_time: "12:30", end_date: null, end_time: "15:00", location: "Golden Gate Park", maps_url: null, duration: null, proposee: "Hailey", status: "upcoming", created_at: "2026-09-01 10:00:00", cover_image_id: null, note_hailey: null, note_matteo: null },
+  { id: 2, title: "Tahoe trip", description: "Cabin", event_date: "2026-09-25", event_time: null, end_date: "2026-09-27", end_time: null, location: null, maps_url: null, duration: 3, proposee: "Matteo", status: "proposed", created_at: "2026-09-02 10:00:00", cover_image_id: 7, note_hailey: null, note_matteo: null },
+  { id: 3, title: "Old dinner", description: "Sushi", event_date: "2026-08-01", event_time: "19:00", end_date: null, end_time: null, location: null, maps_url: null, duration: null, proposee: "Matteo", status: "saved", created_at: "2026-07-01 10:00:00", cover_image_id: null, note_hailey: null, note_matteo: null },
+  { id: 4, title: "Someday", description: "Undated", event_date: null, event_time: null, end_date: null, end_time: null, location: null, maps_url: null, duration: null, proposee: "Hailey", status: "proposed", created_at: "2026-07-01 10:00:00", cover_image_id: null, note_hailey: null, note_matteo: null },
 ];
 
 const connected = new Set<string>();
 
 function endOf(row: (typeof STD_ROWS)[number]): string {
-  const d = new Date(`${row.event_date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + (row.duration ?? 1) - 1);
-  return d.toISOString().slice(0, 10);
+  return row.end_date ?? row.event_date!;
 }
 
 export async function stdMock(request: Request): Promise<Response> {

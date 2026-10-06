@@ -8,18 +8,18 @@ const STATUS_LABELS = { proposed: "Proposed", upcoming: "Upcoming", saved: "Save
 
 export function StdSheet({ event, onClose }: { event: ExternalEvent; onClose: () => void }) {
   const [modal] = useModal(onClose);
-  const dates =
-    event.start_date === event.end_date
-      ? formatLongDate(event.start_date)
-      : `${formatLongDate(event.start_date)} to ${formatLongDate(event.end_date)}`;
+  const start = formatLongDate(event.start_date) + (event.start_time ? `, ${formatTime(event.start_time)}` : "");
+  let when = start;
+  if (event.start_date !== event.end_date) {
+    when += ` to ${formatLongDate(event.end_date)}${event.end_time ? `, ${formatTime(event.end_time)}` : ""}`;
+  } else if (event.end_time) {
+    when += event.start_time ? ` to ${formatTime(event.end_time)}` : `, until ${formatTime(event.end_time)}`;
+  }
   return (
     <Modal {...modal} title={event.title}>
       <dl className="details">
         <dt>When</dt>
-        <dd>
-          {dates}
-          {event.start_time && `, ${formatTime(event.start_time)}`}
-        </dd>
+        <dd>{when}</dd>
         <dt>Status</dt>
         <dd>
           <span className={`chip chip--std chip--${event.status}`}>{STATUS_LABELS[event.status]}</span>

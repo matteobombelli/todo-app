@@ -51,6 +51,7 @@ function std(overrides: Partial<ExternalEvent>): ExternalEvent {
     start_date: "2026-09-22",
     end_date: "2026-09-22",
     start_time: null,
+    end_time: null,
     status: "upcoming",
     location: null,
     ...overrides,

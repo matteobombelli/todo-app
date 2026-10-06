@@ -1,6 +1,5 @@
 import type { ExternalEvent, StdStatus } from "../../shared/agenda";
 import type { User } from "../../shared/api";
-import { addDays } from "../../shared/dates";
 
 // Read-only view of save-the-date through the STD service binding. Its Worker accepts STD_TOKEN as a
 // bearer token for POST /api/todo/redeem and for GET /api/dates, the latter only on behalf of an
@@ -12,7 +11,9 @@ interface StdRow {
   event_date: string | null;
   event_time: string | null;
   location: string | null;
-  duration: number | null;
+  /** Optional end; a lone end_time means the same day as event_date. */
+  end_date: string | null;
+  end_time: string | null;
   status: StdStatus;
 }
 
@@ -44,8 +45,9 @@ export async function fetchStdDates(env: Env, userId: string, from: string, to: 
       source: "save-the-date",
       title: r.title,
       start_date: r.event_date,
-      end_date: addDays(r.event_date, Math.max(r.duration ?? 1, 1) - 1),
+      end_date: r.end_date && r.end_date > r.event_date ? r.end_date : r.event_date,
       start_time: r.event_time || null,
+      end_time: r.end_time || null,
       status: r.status,
       location: r.location || null,
     }));

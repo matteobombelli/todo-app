@@ -12,6 +12,8 @@ export interface ExternalEvent {
   start_date: string;
   end_date: string;
   start_time: string | null;
+  /** On end_date; save-the-date may give one without a start time. */
+  end_time: string | null;
   status: StdStatus;
   location: string | null;
 }

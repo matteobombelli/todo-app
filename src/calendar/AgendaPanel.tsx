@@ -29,6 +29,12 @@ function timeRange(o: Occurrence): string {
   return `${formatTime(o.start_time!)} to ${formatTime(o.end_time!)}`;
 }
 
+function externalTimes(e: ExternalEvent): string {
+  if (!e.start_time) return "Save the Date";
+  if (e.start_date !== e.end_date || !e.end_time) return formatTime(e.start_time);
+  return `${formatTime(e.start_time)} to ${formatTime(e.end_time)}`;
+}
+
 /** An agenda entry: tapping opens it; a right-click or the kebab shows its actions. */
 function EntryRow({
   title,
@@ -74,7 +80,7 @@ function ExternalRow({ event, handlers }: { event: ExternalEvent; handlers: Cale
         aria-hidden="true"
       />
       <span className="row__title">{event.title}</span>
-      <span className="row__meta">{event.start_time ? formatTime(event.start_time) : "Save the Date"}</span>
+      <span className="row__meta">{externalTimes(event)}</span>
     </EntryRow>
   );
 }

@@ -62,8 +62,11 @@ export function TimeGrid({
     }
     for (const e of external) {
       if (e.start_time === null || e.start_date !== e.end_date) bars.push({ kind: "external", start_date: e.start_date, end_date: e.end_date, event: e });
-      // Save-the-date only has a start time; show it as an hour.
-      else blocks.push({ kind: "external", start_date: e.start_date, start_time: e.start_time, end_date: e.end_date, end_time: endOfHour(e.start_time), event: e });
+      // Without a later end time on the same day, show it as an hour.
+      else {
+        const endTime = e.end_time && e.end_time > e.start_time ? e.end_time : endOfHour(e.start_time);
+        blocks.push({ kind: "external", start_date: e.start_date, start_time: e.start_time, end_date: e.end_date, end_time: endTime, event: e });
+      }
     }
     return { bars, blocks };
   }, [occurrences, external]);
