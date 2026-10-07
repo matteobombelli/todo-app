@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isTimeZone } from "./dates";
+import { isTime, isTimeZone } from "./dates";
 
 export const API_PREFIX = "/api";
 
@@ -19,6 +19,11 @@ export type LoginBody = z.input<typeof LoginBody>;
 // Lead times offered for timed-event reminders, in minutes before the start.
 export const EVENT_REMINDER_MINUTES = [0, 5, 10, 15, 30, 60] as const;
 
+// When items due on a date with no time notify, and the Settings choices; null turns them off.
+// The default is also the users.item_reminder_time column default (migrations/0005).
+export const DEFAULT_ITEM_REMINDER_TIME = "09:00";
+export const ITEM_REMINDER_TIMES = ["06:00", "07:00", "08:00", "09:00", "10:00", "12:00", "18:00", "20:00"] as const;
+
 export const SettingsBody = z
   .object({
     timezone: z.string().refine(isTimeZone, "Unknown timezone").optional(),
@@ -26,8 +31,12 @@ export const SettingsBody = z
       .number()
       .refine((n) => (EVENT_REMINDER_MINUTES as readonly number[]).includes(n), "Unsupported reminder time")
       .optional(),
+    item_reminder_time: z.string().refine(isTime, "Expected HH:MM").nullable().optional(),
   })
-  .refine((b) => b.timezone !== undefined || b.event_reminder_minutes !== undefined, "Nothing to update");
+  .refine(
+    (b) => b.timezone !== undefined || b.event_reminder_minutes !== undefined || b.item_reminder_time !== undefined,
+    "Nothing to update",
+  );
 export type SettingsBody = z.input<typeof SettingsBody>;
 
 export interface User {
@@ -35,6 +44,7 @@ export interface User {
   email: string;
   timezone: string;
   event_reminder_minutes: number;
+  item_reminder_time: string | null;
 }
 
 export const PushSubscriptionBody = z.object({

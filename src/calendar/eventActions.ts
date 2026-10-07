@@ -4,6 +4,7 @@ import { newId } from "../../shared/ids";
 import type { PaletteKey } from "../../shared/palette";
 import { shiftRRule, type Occurrence } from "../../shared/recurrence";
 import { repeatToRRule, type RepeatForm } from "../components/RepeatFields";
+import { offerUndo, removeWithUndo } from "../components/UndoToast";
 import { store } from "../data/instance";
 
 export interface EventForm {
@@ -98,13 +99,15 @@ export async function saveEvent(form: EventForm, occurrence: Occurrence | null, 
   await store.upsert("event_exceptions", exception);
 }
 
+/** Deletes an occurrence (by cancelling it) or the whole event, with an Undo toast. */
 export async function deleteEvent(occurrence: Occurrence, scope: Scope): Promise<void> {
+  const message = `Deleted "${occurrence.title}"`;
   if (scope === "series" || !occurrence.recurring) {
-    await store.remove("events", occurrence.event_id);
+    removeWithUndo("events", occurrence.event_id, message);
     return;
   }
   const existing = occurrence.exception_id ? store.get("event_exceptions", occurrence.exception_id) : undefined;
-  await store.upsert("event_exceptions", {
+  const cancelled = await store.upsert("event_exceptions", {
     title: null,
     notes: null,
     color: null,
@@ -119,4 +122,5 @@ export async function deleteEvent(occurrence: Occurrence, scope: Scope): Promise
     occurrence_date: occurrence.occurrence_date,
     cancelled: true,
   });
+  offerUndo(message, () => void (existing ? store.upsert("event_exceptions", existing) : store.remove("event_exceptions", cancelled.id)));
 }

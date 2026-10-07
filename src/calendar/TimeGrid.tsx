@@ -37,6 +37,7 @@ export function TimeGrid({
   lists,
   handlers,
   onSelectDate,
+  onSlot,
 }: {
   start: string;
   days: number;
@@ -47,6 +48,8 @@ export function TimeGrid({
   lists: Readonly<Record<string, List>>;
   handlers: CalendarHandlers;
   onSelectDate: (date: string) => void;
+  /** A tap on empty space in a day's column, at the half hour it falls in. */
+  onSlot: (e: React.MouseEvent, date: string, time: string) => void;
 }) {
   const dates = Array.from({ length: days }, (_, i) => addDays(start, i));
   const end = dates.at(-1)!;
@@ -158,7 +161,16 @@ export function TimeGrid({
             ))}
           </div>
           {dates.map((d) => (
-            <div key={d} className="tgrid__col">
+            <div
+              key={d}
+              className="tgrid__col"
+              onClick={(e) => {
+                if (e.target !== e.currentTarget) return;
+                const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
+                const m = Math.max(0, Math.min(23 * 60 + 30, Math.floor((y / HOUR_PX) * 2) * 30));
+                onSlot(e, d, `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+              }}
+            >
               {placeBlocks(blocks, d).map((b) => {
                 const item = b.item;
                 const style = {

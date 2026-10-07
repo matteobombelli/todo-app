@@ -375,3 +375,124 @@ export function useShortcuts(keys: Record<string, () => void>): void {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 }
+
+/** Share of a row's width past which a swipe runs its action. */
+const ROW_SWIPE_SHARE = 0.35;
+/** Touches starting this close to the left edge belong to the page's back swipe. */
+const EDGE = 24;
+
+/**
+ * Horizontal touch swipes on a row (`ref`), Mail style: the row follows the finger over its
+ * actions, and a swipe past a third of its width (or a flick) runs `right` (swiped to the right) or
+ * `left`. `ref`'s element gets `data-swipe="right" | "left"` while it shows an action. `left` slides
+ * the row away first, since its action removes it; `right` snaps it back. The click that ends a
+ * swipe is swallowed.
+ */
+export function useRowSwipe(
+  ref: RefObject<HTMLElement | null>,
+  actions: { right?: () => void; left?: () => void } | null,
+): void {
+  const current = useRef(actions);
+  useEffect(() => {
+    current.current = actions;
+  });
+  const enabled = actions !== null;
+
+  useEffect(() => {
+    const el = ref.current;
+    const row = el?.querySelector<HTMLElement>(".row");
+    if (!el || !row || !enabled) return;
+    let start: { x: number; y: number; id: number } | null = null;
+    let locked = false;
+    let dx = 0;
+    let shown = 0;
+    let swallowClick = false;
+    let samples: { x: number; t: number }[] = [];
+
+    const show = (side: "right" | "left" | null) => {
+      if (side) el.dataset.swipe = side;
+      else delete el.dataset.swipe;
+    };
+    const down = (e: PointerEvent) => {
+      swallowClick = false;
+      if (e.pointerType !== "touch" || e.clientX < EDGE || (e.target as Element).closest("input, textarea") || isSliding(row)) return;
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      locked = false;
+      dx = 0;
+      samples = [{ x: e.clientX, t: e.timeStamp }];
+    };
+    const move = (e: PointerEvent) => {
+      if (!start || e.pointerId !== start.id) return;
+      dx = e.clientX - start.x;
+      samples.push({ x: e.clientX, t: e.timeStamp });
+      while (samples.length > 2 && e.timeStamp - samples[0].t > VELOCITY_WINDOW) samples.shift();
+      if (!locked) {
+        if (Math.abs(e.clientY - start.y) > SLOP && Math.abs(e.clientY - start.y) > Math.abs(dx)) start = null;
+        else if (Math.abs(dx) > SLOP) {
+          locked = true;
+          swallowClick = true;
+          el.setPointerCapture(e.pointerId);
+          row.style.transition = "none";
+        }
+        if (!locked) return;
+      }
+      // Only towards a side that has an action.
+      const side = dx > 0 ? "right" : "left";
+      shown = current.current?.[side] ? dx : 0;
+      show(shown ? side : null);
+      row.style.transform = `translateX(${shown}px)`;
+    };
+    const up = (e: PointerEvent) => {
+      if (!start || e.pointerId !== start.id) return;
+      start = null;
+      if (!locked) return;
+      const first = samples[0];
+      const toward = (Math.sign(dx) * (e.clientX - first.x)) / Math.max(1, e.timeStamp - first.t);
+      const side = dx > 0 ? "right" : "left";
+      const action = current.current?.[side];
+      const passed =
+        !!action &&
+        e.type === "pointerup" &&
+        toward > -FLICK &&
+        (Math.abs(dx) > row.offsetWidth * ROW_SWIPE_SHARE || toward > FLICK);
+      if (!passed) {
+        // Already in place: no transition would run to finish a slide.
+        if (shown === 0) resetSlide(row);
+        else slide(row, "");
+        setTimeout(() => show(null), transitionMs(row));
+        return;
+      }
+      haptic();
+      if (side === "left") {
+        slide(row, "translateX(-100%)", () => {
+          action();
+          resetSlide(row);
+          show(null);
+        });
+      } else {
+        action();
+        slide(row, "");
+        setTimeout(() => show(null), transitionMs(row));
+      }
+    };
+    const click = (e: MouseEvent) => {
+      if (!swallowClick) return;
+      swallowClick = false;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    el.addEventListener("click", click, true);
+    return () => {
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      el.removeEventListener("click", click, true);
+    };
+  }, [ref, enabled]);
+}

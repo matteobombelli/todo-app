@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { EVENT_REMINDER_MINUTES, type SettingsBody } from "../shared/api";
+import { EVENT_REMINDER_MINUTES, ITEM_REMINDER_TIMES, type SettingsBody } from "../shared/api";
 import { useAuth } from "./auth/AuthProvider";
 import { useConfirm } from "./components/ConfirmDialog";
 import { Modal } from "./components/Modal";
 import { store } from "./data/instance";
+import { formatTime } from "./format";
 import { disablePush, enablePush, pushState, type PushState } from "./push";
 
 const PUSH_HINTS: Record<PushState, string> = {
-  on: "Reminders for timed to-dos and events are on for this device.",
-  off: "Get reminders for timed to-dos and events on this device.",
+  on: "Reminders for to-dos and timed events are on for this device.",
+  off: "Get reminders for to-dos and timed events on this device.",
   denied: "Notifications are blocked in this browser's settings.",
   unsupported: "Not available here. On iPhone and iPad, add the app to your Home Screen first.",
 };
@@ -94,6 +95,20 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             {EVENT_REMINDER_MINUTES.map((m) => (
               <option key={m} value={m}>
                 {m === 0 ? "When the event starts" : `${m} minutes before`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field__label">To-dos without a time</span>
+          <select
+            value={user.item_reminder_time ?? ""}
+            onChange={(e) => void onSettings({ item_reminder_time: e.target.value || null })}
+          >
+            <option value="">No reminder</option>
+            {ITEM_REMINDER_TIMES.map((t) => (
+              <option key={t} value={t}>
+                {`At ${formatTime(t)} on the day`}
               </option>
             ))}
           </select>

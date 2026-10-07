@@ -35,6 +35,7 @@ function item(overrides: Partial<Item>): Item {
     completed_at: null,
     parent_id: null,
     rrule: "FREQ=WEEKLY",
+    position: null,
     created_at: 1,
     updated_at: 1,
     seq: 1,

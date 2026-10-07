@@ -3,24 +3,23 @@ import { useMemo, useRef, useState } from "react";
 import type { List } from "../../shared/entities";
 import { NavLink } from "react-router";
 import { paletteVar } from "../components/ColorPicker";
-import { useConfirm } from "../components/ConfirmDialog";
 import { useSortable } from "../components/gestures";
 import { useMenu } from "../components/Menu";
 import { setNavDirection } from "../components/motion";
+import { removeWithUndo } from "../components/UndoToast";
 import { useData, useLists } from "../data/hooks";
 import { store } from "../data/instance";
 import { ListEditor } from "./ListEditor";
 
 /**
  * Every list with its counts, reordered by long-press and drag. `compact` is the sidebar version:
- * open count only, no chevron. Right-click a list to edit or delete it.
+ * open count only, no chevron. Right-click a list to edit or delete it (undoably).
  */
 export function ListRows({ compact }: { compact?: boolean }) {
   const lists = useLists();
   const { items } = useData().tables;
   const rows = useRef<HTMLUListElement>(null);
   const [menu, showMenu] = useMenu();
-  const [confirmDialog, confirm] = useConfirm();
   const [editing, setEditing] = useState<List | null>(null);
 
   useSortable(rows, lists.map((l) => l.id).join(), (from, to) => {
@@ -61,12 +60,7 @@ export function ListRows({ compact }: { compact?: boolean }) {
                       label: "Delete List",
                       icon: Trash2,
                       destructive: true,
-                      onSelect: () =>
-                        void (async () => {
-                          if (await confirm("Delete list?", `"${list.name}" and all its items will be deleted.`, "Delete")) {
-                            await store.remove("lists", list.id);
-                          }
-                        })(),
+                      onSelect: () => removeWithUndo("lists", list.id, `Deleted "${list.name}"`),
                     },
                   ])
                 }
@@ -93,7 +87,6 @@ export function ListRows({ compact }: { compact?: boolean }) {
         })}
       </ul>
       {menu}
-      {confirmDialog}
       {editing && <ListEditor list={editing} nextSortOrder={editing.sort_order} onClose={() => setEditing(null)} />}
     </>
   );

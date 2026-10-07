@@ -7,6 +7,7 @@ export interface IconButtonProps {
   icon: LucideIcon;
   label: string;
   onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
+  onMouseDown?: (e: MouseEvent<HTMLButtonElement>) => void;
   /** Renders a router link instead of a button. */
   to?: string;
   /** For links: which way the route transition slides. */
@@ -20,7 +21,7 @@ export interface IconButtonProps {
   ariaExpanded?: boolean;
 }
 
-export function IconButton({ icon: Icon, label, onClick, to, nav, danger, active, disabled, className, type = "button", ariaHasPopup, ariaExpanded }: IconButtonProps) {
+export function IconButton({ icon: Icon, label, onClick, onMouseDown, to, nav, danger, active, disabled, className, type = "button", ariaHasPopup, ariaExpanded }: IconButtonProps) {
   const classes = ["icon-btn", danger && "icon-btn--danger", active && "icon-btn--active", className]
     .filter(Boolean)
     .join(" ");
@@ -40,6 +41,7 @@ export function IconButton({ icon: Icon, label, onClick, to, nav, danger, active
       aria-haspopup={ariaHasPopup}
       aria-expanded={ariaExpanded}
       onClick={onClick}
+      onMouseDown={onMouseDown}
       disabled={disabled}
     >
       {icon}

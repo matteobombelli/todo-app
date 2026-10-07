@@ -8,6 +8,7 @@
   --accent: #007aff;
   --border: #d1d1d6;
   --danger: #ff3b30;
+  --success: #34c759;
   --surface: #f2f2f7;
   /* Sheets and dialogs: white on light, a raised grey on dark. */
   --elevated: #ffffff;
@@ -40,6 +41,7 @@
     --accent: #0a84ff;
     --border: #38383a;
     --danger: #ff453a;
+    --success: #30d158;
     --surface: #1c1c1e;
     --elevated: #1c1c1e;
     --fill: rgba(118, 118, 128, 0.24);
@@ -357,6 +359,21 @@ button:disabled {
 
 .chip--overdue {
   color: var(--danger);
+}
+
+/* A due date that opens rescheduling choices when tapped. */
+.chip--button {
+  margin: -0.25rem 0;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  background: transparent;
+  font-weight: 400;
+}
+
+@media (hover: hover) {
+  .chip--button:hover {
+    background: var(--fill);
+  }
 }
 
 .chip--std {
@@ -1065,8 +1082,43 @@ button.item__body {
   background: transparent;
 }
 
-.item--draft .item__input:focus-visible {
+.item--draft .item__input:focus-visible,
+.item--editing .item__input:focus-visible {
   box-shadow: none;
+}
+
+/* Swipe actions (useRowSwipe): the row slides over a tinted strip with the action's icon. */
+.swipe {
+  position: relative;
+}
+
+.swipe > .row {
+  position: relative;
+}
+
+.swipe[data-swipe] > .row {
+  background: var(--bg);
+}
+
+.swipe__action {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  padding: 0 1.25rem;
+  color: var(--on-color);
+}
+
+.swipe[data-swipe="right"] .swipe__action--right {
+  display: flex;
+  justify-content: flex-start;
+  background: var(--success);
+}
+
+.swipe[data-swipe="left"] .swipe__action--left {
+  display: flex;
+  justify-content: flex-end;
+  background: var(--danger);
 }
 
 /* Below the rows: a tap starts a new item at the end. With no open items it shows as one. */
@@ -1457,6 +1509,10 @@ button.item__body {
   width: 1rem;
   height: 1rem;
   stroke-width: 2.5;
+}
+
+.modal__done {
+  font-weight: 600;
 }
 
 .modal__handle {
@@ -2035,7 +2091,7 @@ button.item__body {
   background: var(--danger);
 }
 
-/* PWA update toast */
+/* Toasts: the PWA update offer and Undo after a deletion. */
 
 .toast {
   position: fixed;
@@ -2054,6 +2110,12 @@ button.item__body {
   transform: translateX(-50%);
   white-space: nowrap;
   animation: toast-in var(--medium) var(--ease-spring);
+}
+
+.toast__message {
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @keyframes toast-in {
@@ -2078,4 +2140,17 @@ button.item__body {
   ::view-transition-new(*) {
     animation: none !important;
   }
+}
+
+/* The hidden field behind useDatePicker: present for the picker to anchor to, never seen. */
+.date-picker {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }

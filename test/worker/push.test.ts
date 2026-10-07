@@ -86,7 +86,7 @@ describe("push routes", () => {
 
 describe("dueReminders", () => {
   it("finds an open timed item at its due time in the user's timezone, for five minutes", async () => {
-    const { cookie, userId, listId } = await setup();
+    const { cookie, userId, listId } = await setup({ item_reminder_time: null });
     const due = item(listId, { due_date: "2026-09-26", due_time: "09:00" });
     await mutate(cookie, [
       upsert("items", due),
@@ -104,6 +104,23 @@ describe("dueReminders", () => {
     expect(await remindersFor(userId, "2026-09-26T07:00:00Z")).toEqual([expected]);
     expect(await remindersFor(userId, "2026-09-26T07:04:00Z")).toEqual([expected]);
     expect(await remindersFor(userId, "2026-09-26T07:05:00Z")).toEqual([]);
+  });
+
+  it("reminds of an item due on a date alone at the user's item reminder time, by default 09:00", async () => {
+    const { cookie, userId, listId } = await setup();
+    const due = item(listId, { due_date: "2026-09-26" });
+    await mutate(cookie, [upsert("items", due), upsert("items", item(listId, { due_date: "2026-09-27" }))]);
+    // 09:00 in Rome.
+    expect(await remindersFor(userId, "2026-09-26T07:00:00Z")).toEqual([
+      { userId, key: `item:${due.id}:2026-09-26Tday`, title: "Call the bank", body: "Due today · Errands", url: `/todo/${listId}` },
+    ]);
+
+    await jsonRequest("/settings", "PATCH", { item_reminder_time: "18:00" }, cookie);
+    expect(await remindersFor(userId, "2026-09-26T07:00:00Z")).toEqual([]);
+    expect((await remindersFor(userId, "2026-09-26T16:00:00Z")).map((r) => r.key)).toEqual([`item:${due.id}:2026-09-26Tday`]);
+
+    await jsonRequest("/settings", "PATCH", { item_reminder_time: null }, cookie);
+    expect(await remindersFor(userId, "2026-09-26T16:00:00Z")).toEqual([]);
   });
 
   it("skips users without a subscription", async () => {

@@ -5,6 +5,7 @@ import { useAuth } from "./auth/AuthProvider";
 import { IconButton } from "./components/IconButton";
 import { setNavDirection } from "./components/motion";
 import { Spinner } from "./components/Spinner";
+import { UndoToast } from "./components/UndoToast";
 import { useData, useLists } from "./data/hooks";
 import { startSyncLoop, store } from "./data/instance";
 import { refreshPush } from "./push";
@@ -120,6 +121,7 @@ export default function Shell() {
         <Tabs className="tabs tabs--bottom" />
       </div>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <UndoToast />
     </div>
   );
 }

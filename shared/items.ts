@@ -13,19 +13,39 @@ export function isOverdue(item: Item, now: Now): boolean {
   return item.due_time !== null && item.due_time < now.time;
 }
 
-// Dated items by date then time, a date's untimed items after its timed ones, then undated items
-// oldest first. Overdue items need no special case: they have the earliest dates.
+/** An item's place among those due at the same date and time: its position, or when it was created. */
+export function itemRank(item: Pick<Item, "position" | "created_at">): number {
+  return item.position ?? item.created_at;
+}
+
+// Dated items by date then time, a date's untimed items after its timed ones, then undated items;
+// items due at the same date and time by rank, so oldest first unless placed. Overdue items need no
+// special case: they have the earliest dates.
 export function compareItems(a: Item, b: Item): number {
   if (a.due_date === null || b.due_date === null) {
     if (a.due_date !== b.due_date) return a.due_date === null ? 1 : -1;
-    return a.created_at - b.created_at || a.id.localeCompare(b.id);
+    return itemRank(a) - itemRank(b) || a.id.localeCompare(b.id);
   }
   return (
     a.due_date.localeCompare(b.due_date) ||
     (a.due_time ?? "24:00").localeCompare(b.due_time ?? "24:00") ||
-    a.created_at - b.created_at ||
+    itemRank(a) - itemRank(b) ||
     a.id.localeCompare(b.id)
   );
+}
+
+/**
+ * The position for a new item due at `slot` that sorts straight after `anchor` among `items`. Null
+ * (created_at, so after everything already there) when the anchor is last or due at another slot.
+ */
+export function positionAfter(anchor: Item, slot: Pick<Item, "due_date" | "due_time">, items: Item[]): number | null {
+  const same = (i: Pick<Item, "due_date" | "due_time">) => i.due_date === slot.due_date && i.due_time === slot.due_time;
+  if (!same(anchor)) return null;
+  const rank = itemRank(anchor);
+  const next = items
+    .filter((i) => i.id !== anchor.id && same(i) && itemRank(i) > rank)
+    .reduce<number | null>((min, i) => (min === null || itemRank(i) < min ? itemRank(i) : min), null);
+  return next === null ? null : (rank + next) / 2;
 }
 
 /**

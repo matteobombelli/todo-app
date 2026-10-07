@@ -26,6 +26,7 @@ interface PushUser {
   id: string;
   timezone: string;
   event_reminder_minutes: number;
+  item_reminder_time: string | null;
 }
 
 interface SubscriptionRow {
@@ -43,7 +44,7 @@ function minuteOf(date: string, time: string): number {
 /** Reminders due at `at` for every user with a push subscription, minus those already sent. */
 export async function dueReminders(db: D1Database, at: Date): Promise<Reminder[]> {
   const { results: users } = await db
-    .prepare("SELECT id, timezone, event_reminder_minutes FROM users WHERE id IN (SELECT user_id FROM push_subscriptions)")
+    .prepare("SELECT id, timezone, event_reminder_minutes, item_reminder_time FROM users WHERE id IN (SELECT user_id FROM push_subscriptions)")
     .all<PushUser>();
   const out: Reminder[] = [];
   for (const user of users) out.push(...(await userReminders(db, user, at)));
@@ -65,10 +66,10 @@ async function userReminders(db: D1Database, user: PushUser, at: Date): Promise<
     db
       .prepare(
         `SELECT i.*, l.name AS list_name FROM items i JOIN lists l ON l.id = i.list_id
-         WHERE i.user_id = ? AND i.deleted_at IS NULL AND i.completed_at IS NULL AND i.due_time IS NOT NULL
-           AND i.due_date BETWEEN ? AND ?`,
+         WHERE i.user_id = ? AND i.deleted_at IS NULL AND i.completed_at IS NULL
+           AND (i.due_time IS NOT NULL OR ? IS NOT NULL) AND i.due_date BETWEEN ? AND ?`,
       )
-      .bind(user.id, yesterday, now.date)
+      .bind(user.id, user.item_reminder_time, yesterday, now.date)
       .all<Record<string, unknown> & { list_name: string }>(),
     listRecords(db, user.id, "events"),
     listRecords(db, user.id, "event_exceptions"),
@@ -77,14 +78,16 @@ async function userReminders(db: D1Database, user: PushUser, at: Date): Promise<
   const sent = new Set(sentRows.results.map((r) => r.key));
   const out: Reminder[] = [];
 
+  // Items due at a time notify then; items due on a date alone, at the user's item_reminder_time.
   for (const { list_name, ...row } of itemRows.results) {
-    const item = toRecord<"items">(row) as Item & { due_date: string; due_time: string };
-    if (!due(item.due_date, item.due_time)) continue;
+    const item = toRecord<"items">(row) as Item & { due_date: string };
+    const time = item.due_time ?? user.item_reminder_time;
+    if (time === null || !due(item.due_date, time)) continue;
     out.push({
       userId: user.id,
-      key: `item:${item.id}:${item.due_date}T${item.due_time}`,
+      key: `item:${item.id}:${item.due_date}T${item.due_time ?? "day"}`,
       title: item.title,
-      body: `Due ${item.due_time} · ${list_name}`,
+      body: item.due_time ? `Due ${item.due_time} · ${list_name}` : `Due today · ${list_name}`,
       url: `/todo/${item.list_id}`,
     });
   }

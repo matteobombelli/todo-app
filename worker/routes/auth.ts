@@ -1,4 +1,4 @@
-import { DEFAULT_TIMEZONE, LoginBody, RegisterBody, SettingsBody, type User } from "../../shared/api";
+import { DEFAULT_ITEM_REMINDER_TIME, DEFAULT_TIMEZONE, LoginBody, RegisterBody, SettingsBody, type User } from "../../shared/api";
 import { newId } from "../../shared/ids";
 import { DUMMY_HASH, hashPassword, verifyPassword } from "../auth/password";
 import { createSession, destroySession, requireUser } from "../auth/session";
@@ -10,6 +10,7 @@ interface UserRow {
   email: string;
   timezone: string;
   event_reminder_minutes: number;
+  item_reminder_time: string | null;
   password_hash: string;
 }
 
@@ -19,7 +20,13 @@ export function registerAuthRoutes(r: Router): void {
     if (body.inviteCode !== c.env.REGISTRATION_SECRET) throw new HttpError(403, "Invalid invite code");
     const existing = await c.env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(body.email).first();
     if (existing) throw new HttpError(409, "Email already registered");
-    const user: User = { id: newId(), email: body.email, timezone: DEFAULT_TIMEZONE, event_reminder_minutes: 0 };
+    const user: User = {
+      id: newId(),
+      email: body.email,
+      timezone: DEFAULT_TIMEZONE,
+      event_reminder_minutes: 0,
+      item_reminder_time: DEFAULT_ITEM_REMINDER_TIME,
+    };
     try {
       await c.env.DB.batch([
         c.env.DB.prepare("INSERT INTO users (id, email, password_hash, timezone, created_at) VALUES (?, ?, ?, ?, ?)").bind(
@@ -42,14 +49,20 @@ export function registerAuthRoutes(r: Router): void {
 
   r.post("/auth/login", async (c) => {
     const body = await parseJson(c.req, LoginBody);
-    const row = await c.env.DB.prepare("SELECT id, email, timezone, event_reminder_minutes, password_hash FROM users WHERE email = ?")
+    const row = await c.env.DB.prepare("SELECT id, email, timezone, event_reminder_minutes, item_reminder_time, password_hash FROM users WHERE email = ?")
       .bind(body.email)
       .first<UserRow>();
     const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
     if (!row || !ok) throw new HttpError(401, "Invalid email or password");
     await createSession(c, row.id);
     return json({
-      user: { id: row.id, email: row.email, timezone: row.timezone, event_reminder_minutes: row.event_reminder_minutes } satisfies User,
+      user: {
+        id: row.id,
+        email: row.email,
+        timezone: row.timezone,
+        event_reminder_minutes: row.event_reminder_minutes,
+        item_reminder_time: row.item_reminder_time,
+      } satisfies User,
     });
   });
 
@@ -67,13 +80,21 @@ export function registerAuthRoutes(r: Router): void {
   r.patch("/settings", async (c) => {
     const user = await requireUser(c);
     const body = await parseJson(c.req, SettingsBody);
-    // Each field only when sent, so patches from two devices don't undo each other.
+    // Each field only when sent, so patches from two devices don't undo each other. The reminder
+    // time can be set to null (off), so whether it was sent travels separately.
     const row = await c.env.DB.prepare(
-      `UPDATE users SET timezone = COALESCE(?, timezone), event_reminder_minutes = COALESCE(?, event_reminder_minutes)
-       WHERE id = ? RETURNING timezone, event_reminder_minutes`,
+      `UPDATE users SET timezone = COALESCE(?, timezone), event_reminder_minutes = COALESCE(?, event_reminder_minutes),
+         item_reminder_time = CASE WHEN ? THEN ? ELSE item_reminder_time END
+       WHERE id = ? RETURNING timezone, event_reminder_minutes, item_reminder_time`,
     )
-      .bind(body.timezone ?? null, body.event_reminder_minutes ?? null, user.id)
-      .first<Pick<User, "timezone" | "event_reminder_minutes">>();
+      .bind(
+        body.timezone ?? null,
+        body.event_reminder_minutes ?? null,
+        body.item_reminder_time !== undefined ? 1 : 0,
+        body.item_reminder_time ?? null,
+        user.id,
+      )
+      .first<Pick<User, "timezone" | "event_reminder_minutes" | "item_reminder_time">>();
     return json({ user: { ...user, ...row } satisfies User });
   });
 }

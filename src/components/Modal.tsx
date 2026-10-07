@@ -16,6 +16,8 @@ export interface ModalProps {
    * phones and a centred box everywhere else.
    */
   variant?: "panel" | "dialog";
+  /** For editors that save as they close: a Done button in place of the close button. */
+  done?: boolean;
   children: ReactNode;
 }
 
@@ -35,7 +37,7 @@ export function useModal(onExited: () => void): [Pick<ModalProps, "open" | "onCl
   return [{ open, onClose: close, onExited }, close];
 }
 
-export function Modal({ open, onClose, onExited, title, variant = "panel", children }: ModalProps) {
+export function Modal({ open, onClose, onExited, title, variant = "panel", done, children }: ModalProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLElement>(null);
   const opener = useRef<Element | null>(null);
@@ -55,11 +57,12 @@ export function Modal({ open, onClose, onExited, title, variant = "panel", child
     }
   }, [present, onExited]);
 
-  // Focus starts on the close button and returns to whatever opened the modal.
+  // Focus starts on the close button, unless a field took it (autoFocus), and returns to whatever
+  // opened the modal.
   useEffect(() => {
     if (!open) return;
     opener.current = document.activeElement;
-    header.current?.querySelector("button")?.focus();
+    if (!dialog.current?.contains(document.activeElement)) header.current?.querySelector("button")?.focus();
     return () => {
       if (opener.current instanceof HTMLElement) opener.current.focus();
     };
@@ -135,7 +138,13 @@ export function Modal({ open, onClose, onExited, title, variant = "panel", child
         >
           <span className="modal__handle" aria-hidden="true" />
           <h2 className="modal__title">{title}</h2>
-          <IconButton icon={X} label="Close" onClick={onClose} />
+          {done ? (
+            <button type="button" className="button--plain modal__done" onClick={onClose}>
+              Done
+            </button>
+          ) : (
+            <IconButton icon={X} label="Close" onClick={onClose} />
+          )}
         </header>
         <div className="modal__body">{children}</div>
       </div>

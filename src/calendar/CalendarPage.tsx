@@ -1,18 +1,18 @@
-import { ChevronLeft, ChevronRight, ExternalLink, Info, Pencil, Plus, Trash2 } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, Info, ListPlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useSearchParams } from "react-router";
 import type { ExternalEvent } from "../../shared/agenda";
 import { addDays, daysInMonth, isDate, makeDate, weekStart } from "../../shared/dates";
 import type { Item, List } from "../../shared/entities";
 import type { Occurrence } from "../../shared/recurrence";
 import { STD_APP_URL } from "../../shared/std";
-import { useConfirm } from "../components/ConfirmDialog";
+import { useDatePicker } from "../components/DatePicker";
 import { isSliding, resetSlide, slide, useShortcuts, useSwipe } from "../components/gestures";
 import { IconButton } from "../components/IconButton";
 import { useMenu, type MenuEntry } from "../components/Menu";
 import type { Now } from "../../shared/items";
 import { useData, useLists, useNow } from "../data/hooks";
-import { formatDayMonth, formatLongDate, formatMonthYear } from "../format";
+import { formatDayMonth, formatLongDate, formatMonthYear, formatTime } from "../format";
 import { ItemEditor } from "../todo/ItemEditor";
 import { itemMenu } from "../todo/itemMenu";
 import { AgendaPanel, type CalendarHandlers, type CalendarTarget } from "./AgendaPanel";
@@ -78,6 +78,7 @@ function Period({
   handlers,
   onSelect,
   onSelectDate,
+  onSlot,
 }: {
   view: View;
   date: string;
@@ -88,6 +89,7 @@ function Period({
   handlers: CalendarHandlers;
   onSelect: (date: string) => void;
   onSelectDate: (date: string) => void;
+  onSlot: (e: MouseEvent, date: string, time: string) => void;
 }) {
   const [entrance] = useState(offset === 0 ? " period--fade" : "");
   const { from, to } = range(view, date);
@@ -121,6 +123,7 @@ function Period({
           lists={lists}
           handlers={handlers}
           onSelectDate={onSelectDate}
+          onSlot={onSlot}
         />
       )}
     </div>
@@ -128,8 +131,9 @@ function Period({
 }
 
 type Editing =
-  | { kind: "event"; occurrence: Occurrence | null }
+  | { kind: "event"; occurrence: Occurrence | null; date?: string; time?: string | null }
   | { kind: "item"; item: Item }
+  | { kind: "new-item"; date: string; time: string | null }
   | { kind: "external"; event: ExternalEvent };
 
 export default function CalendarPage() {
@@ -144,7 +148,7 @@ export default function CalendarPage() {
   const allLists = useLists();
   const itemList = useMemo(() => Object.values(items), [items]);
   const [menu, showMenu] = useMenu();
-  const [confirmDialog, confirm] = useConfirm();
+  const [datePicker, pickDate] = useDatePicker();
   // A recurring event being deleted, waiting for "this event or all".
   const [deleting, setDeleting] = useState<Occurrence | null>(null);
 
@@ -163,7 +167,16 @@ export default function CalendarPage() {
     else if (target === periodKey(view, stepDate(view, date, -1))) slideTo(-1, now.date);
     else go({ date: now.date });
   };
-  const newEvent = () => setEditing({ kind: "event", occurrence: null });
+  const newEvent = (at = date, time?: string | null) => setEditing({ kind: "event", occurrence: null, date: at, time });
+  const newItem = (at = date, time: string | null = null) => setEditing({ kind: "new-item", date: at, time });
+  // What can be added on a day (at a time): an event, or a to-do when there is a list to put it in.
+  const newEntries = (at: string, time?: string): MenuEntry[] => {
+    const when = time ? ` at ${formatTime(time)}` : "";
+    return [
+      { label: `New Event${when}`, icon: CalendarPlus, onSelect: () => newEvent(at, time) },
+      ...(allLists.length ? [{ label: `New To-do${when}`, icon: ListPlus, onSelect: () => newItem(at, time ?? null) }] : []),
+    ];
+  };
 
   useSwipe(track, (dir) => go({ date: stepDate(view, date, dir) }));
   // A swipe or slide leaves the track moved onto a neighbour; the neighbour is now the current
@@ -172,7 +185,7 @@ export default function CalendarPage() {
     if (track.current) resetSlide(track.current);
   }, [view, date]);
   useShortcuts({
-    n: newEvent,
+    n: () => newEvent(),
     t: goToday,
     ArrowLeft: () => step(-1),
     ArrowRight: () => step(1),
@@ -188,7 +201,7 @@ export default function CalendarPage() {
 
   function entryMenu(target: CalendarTarget): MenuEntry[] {
     if (target.kind === "item") {
-      return itemMenu(target.item, { lists: allLists, items, onEdit: (item) => setEditing({ kind: "item", item }), confirm });
+      return itemMenu(target.item, { lists: allLists, onEdit: (item) => setEditing({ kind: "item", item }), pickDate });
     }
     if (target.kind === "external") {
       const { event } = target;
@@ -205,11 +218,7 @@ export default function CalendarPage() {
         label: "Delete Event",
         icon: Trash2,
         destructive: true,
-        onSelect: () =>
-          void (async () => {
-            if (occurrence.recurring) setDeleting(occurrence);
-            else if (await confirm("Delete event?", `"${occurrence.title}" will be deleted.`, "Delete")) await deleteEvent(occurrence, "series");
-          })(),
+        onSelect: () => (occurrence.recurring ? setDeleting(occurrence) : void deleteEvent(occurrence, "series")),
       },
     ];
   }
@@ -237,7 +246,7 @@ export default function CalendarPage() {
             </button>
           ))}
         </div>
-        <IconButton icon={Plus} label="New event" onClick={newEvent} className="cal-header__add" />
+        <IconButton icon={Plus} label="New event or to-do" ariaHasPopup="menu" onClick={(e) => showMenu(e, newEntries(date))} className="cal-header__add" />
       </div>
 
       <div className="cal-swipe">
@@ -256,18 +265,28 @@ export default function CalendarPage() {
                 handlers={handlers}
                 onSelect={(sel) => go({ date: sel })}
                 onSelectDate={(sel) => go({ view: "day", date: sel })}
+                onSlot={(e, at, time) => showMenu(e, newEntries(at, time), true)}
               />
             );
           })}
         </div>
       </div>
 
-      {editing?.kind === "event" && <EventEditor occurrence={editing.occurrence} date={date} onClose={() => setEditing(null)} />}
+      {editing?.kind === "event" && (
+        <EventEditor occurrence={editing.occurrence} date={editing.date ?? date} time={editing.time} onClose={() => setEditing(null)} />
+      )}
       {editing?.kind === "item" && <ItemEditor item={editing.item} onClose={() => setEditing(null)} />}
+      {editing?.kind === "new-item" && (
+        <ItemEditor
+          item={null}
+          initial={{ list_id: allLists[0]?.id ?? "", due_date: editing.date, due_time: editing.time }}
+          onClose={() => setEditing(null)}
+        />
+      )}
       {editing?.kind === "external" && <StdSheet event={editing.event} onClose={() => setEditing(null)} />}
       {deleting && <ScopeDialog verb="Delete" onPick={(scope) => void deleteEvent(deleting, scope)} onClose={() => setDeleting(null)} />}
       {menu}
-      {confirmDialog}
+      {datePicker}
     </div>
   );
 }

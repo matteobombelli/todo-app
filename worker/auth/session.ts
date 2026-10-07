@@ -16,6 +16,7 @@ interface SessionRow {
   email: string;
   timezone: string;
   event_reminder_minutes: number;
+  item_reminder_time: string | null;
 }
 
 /** sessions.id for a raw cookie token: hex sha256. */
@@ -48,7 +49,7 @@ export async function sessionUser(req: Request, db: D1Database): Promise<(User &
   const id = await hashToken(token);
   const row = await db
     .prepare(
-      "SELECT s.expires_at, s.user_id, u.email, u.timezone, u.event_reminder_minutes FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
+      "SELECT s.expires_at, s.user_id, u.email, u.timezone, u.event_reminder_minutes, u.item_reminder_time FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
     )
     .bind(id)
     .first<SessionRow>();
@@ -62,6 +63,7 @@ export async function sessionUser(req: Request, db: D1Database): Promise<(User &
     email: row.email,
     timezone: row.timezone,
     event_reminder_minutes: row.event_reminder_minutes,
+    item_reminder_time: row.item_reminder_time,
     expiresAt: row.expires_at,
     sessionId: id,
   };
@@ -75,7 +77,13 @@ export async function requireUser(c: Ctx): Promise<User> {
     await c.env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").bind(t + SESSION_TTL_MS, session.sessionId).run();
     appendSessionCookie(c, readCookie(c.req, SESSION_COOKIE)!, SESSION_TTL_MS / 1000);
   }
-  return { id: session.id, email: session.email, timezone: session.timezone, event_reminder_minutes: session.event_reminder_minutes };
+  return {
+    id: session.id,
+    email: session.email,
+    timezone: session.timezone,
+    event_reminder_minutes: session.event_reminder_minutes,
+    item_reminder_time: session.item_reminder_time,
+  };
 }
 
 export async function destroySession(c: Ctx): Promise<void> {

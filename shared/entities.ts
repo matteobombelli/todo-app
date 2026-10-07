@@ -45,6 +45,9 @@ export const ItemFields = z
     parent_id: Id.nullable().default(null),
     // Repeats from due_date: completing the item moves it to the next occurrence (see completeItem).
     rrule: RRule.nullable().default(null),
+    // Order among items with the same due date and time, in created_at's units; null means
+    // created_at (see itemRank). Set when an item is added below another.
+    position: z.number().finite().nullable().default(null),
   })
   .refine((i) => i.due_time === null || i.due_date !== null, { message: "due_time needs due_date", path: ["due_time"] })
   .refine((i) => i.rrule === null || i.due_date !== null, { message: "A repeating item needs a due date", path: ["rrule"] })

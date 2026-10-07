@@ -200,6 +200,7 @@ describe("DataStore", () => {
       completed_at: null,
       parent_id: null,
       rrule: null,
+      position: null,
     });
     const doomed = await store.upsert("items", item(l.id));
     const survivor = await store.upsert("items", item(other.id));
@@ -226,6 +227,7 @@ describe("DataStore", () => {
       completed_at: null,
       parent_id: null,
       rrule: null,
+      position: null,
       ...overrides,
     });
     const parent = await store.upsert("items", fields());
@@ -243,6 +245,58 @@ describe("DataStore", () => {
 
     await store.remove("items", parent.id);
     expect(Object.keys(items())).toEqual([]);
+  });
+
+  it("hides a removal held for undo, writes nothing until it commits, and undo brings it all back", async () => {
+    const { fetch } = fakeServer([]);
+    const store = makeStore(fetch);
+    await store.load("u1");
+    const l = await store.upsert("lists", listFields());
+    const item = {
+      id: crypto.randomUUID(),
+      list_id: l.id,
+      title: "x",
+      notes: "",
+      due_date: null,
+      due_time: null,
+      completed_at: null,
+      parent_id: null,
+      rrule: null,
+      position: null,
+    };
+    await store.upsert("items", item);
+    const pendingBefore = store.getSnapshot().pending;
+
+    const undo = store.removeLater("lists", l.id, 50);
+    expect(store.getSnapshot().tables.lists[l.id]).toBeUndefined();
+    expect(store.getSnapshot().tables.items[item.id]).toBeUndefined();
+    expect(store.getSnapshot().pending).toBe(pendingBefore);
+    undo();
+    await vi.waitFor(() => expect(store.getSnapshot().tables.lists[l.id]).toMatchObject({ name: "Groceries" }));
+    expect(store.getSnapshot().tables.items[item.id]).toMatchObject({ title: "x" });
+    await new Promise((r) => setTimeout(r, 80));
+    expect(store.getSnapshot().pending).toBe(pendingBefore);
+
+    store.removeLater("lists", l.id, 20);
+    await vi.waitFor(() => expect(store.getSnapshot().pending).toBe(pendingBefore + 1));
+    expect(store.getSnapshot().tables.lists[l.id]).toBeUndefined();
+    // Gone from IndexedDB too, orphans included.
+    const reloaded = makeStore(fetch, (store as unknown as { options: { dbName: string } }).options.dbName);
+    await reloaded.load("u1");
+    expect(reloaded.getSnapshot().tables.items[item.id]).toBeUndefined();
+  });
+
+  it("commits held removals early on request", async () => {
+    const { fetch } = fakeServer([]);
+    const store = makeStore(fetch);
+    await store.load("u1");
+    const l = await store.upsert("lists", listFields());
+    const undo = store.removeLater("lists", l.id, 60_000);
+    store.commitRemovals();
+    await vi.waitFor(() => expect(store.getSnapshot().pending).toBe(2));
+    undo();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(store.getSnapshot().tables.lists[l.id]).toBeUndefined();
   });
 
   it("reports 401s and stops", async () => {

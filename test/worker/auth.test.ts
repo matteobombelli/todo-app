@@ -30,7 +30,7 @@ describe("POST /auth/register", () => {
     const { user } = (await res.json()) as { user: { id: string; email: string; timezone: string } };
     expect(user.email).toBe("new@example.com");
     expect(user.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(Object.keys(user).sort()).toEqual(["email", "event_reminder_minutes", "id", "timezone"]);
+    expect(Object.keys(user).sort()).toEqual(["email", "event_reminder_minutes", "id", "item_reminder_time", "timezone"]);
 
     const cookies = setCookies(res);
     expect(cookies).toHaveLength(1);
@@ -257,6 +257,16 @@ describe("PATCH /settings", () => {
     expect(await res.json()).toEqual({ user: { ...user, event_reminder_minutes: 15 } });
     const me = (await (await request("/auth/me", { headers: cookieHeader(cookie) })).json()) as { user: unknown };
     expect(me.user).toEqual({ ...user, event_reminder_minutes: 15 });
+  });
+
+  it("sets the item reminder time, turns it off, and leaves it alone when not sent", async () => {
+    const { cookie, user } = await registerAndLogin(uniqueEmail());
+    expect(user).toMatchObject({ item_reminder_time: "09:00" });
+    const set = async (body: object) => ((await (await jsonRequest("/settings", "PATCH", body, cookie)).json()) as { user: object }).user;
+    expect(await set({ item_reminder_time: "07:00" })).toEqual({ ...user, item_reminder_time: "07:00" });
+    expect(await set({ item_reminder_time: null })).toEqual({ ...user, item_reminder_time: null });
+    expect(await set({ event_reminder_minutes: 5 })).toEqual({ ...user, item_reminder_time: null, event_reminder_minutes: 5 });
+    expect((await jsonRequest("/settings", "PATCH", { item_reminder_time: "9am" }, cookie)).status).toBe(400);
   });
 
   it("rejects an unsupported reminder time and an empty patch", async () => {

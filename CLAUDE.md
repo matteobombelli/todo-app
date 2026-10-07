@@ -45,8 +45,12 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
   `services/push.ts` the reminders the `scheduled` handler sends.
 - `src/`: the SPA. `data/store.ts` is the offline mirror; `todo/` and `calendar/` are the two tabs.
   Row actions live in context menus (`components/Menu.tsx`, opened by right-click or a row's kebab;
-  `todo/itemMenu.tsx` for items), and tapping an item in a list opens a row to add one below it;
-  `push.ts` subscribes the browser to reminders. `public/push-sw.js` is imported into the generated
+  `todo/itemMenu.tsx` for items). In a list, tapping an item edits its title in place (Return saves
+  and opens a row to add one below it, an emptied title deletes it), its due date opens rescheduling
+  choices, and touch swipes check it off (right) or delete it (left). Deletes never confirm: they
+  hide the record and offer Undo (`components/UndoToast.tsx`, `store.removeLater`), writing the
+  delete only once the toast is gone or the page is hidden. Editors save as they close (a Done
+  button, no Save/Cancel). `push.ts` subscribes the browser to reminders. `public/push-sw.js` is imported into the generated
   service worker to show them.
 
 ## Sync model
@@ -70,6 +74,13 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
   the app sees them on its next pull. Each tool call is one all-or-nothing batch with a single
   `user_seq` bump; the write tools take one entry or an array (`items` / `events`).
 
+## Item order
+
+Open items sort by due date, then time (a date's untimed items after its timed ones), undated last;
+items due at the same date and time by `itemRank`: `position` if set, else `created_at`. An item
+added below another gets a `position` between it and the next item at that slot (`positionAfter`),
+so it lands right below; items added at the end, or by MCP, leave `position` null.
+
 ## Repeating items
 
 An item with an `rrule` (same subset as events, repeating from its `due_date`) is a single row that rolls
@@ -89,7 +100,8 @@ Settings) only for MCP's notion of today and overdue, and to time reminders.
 
 - Web Push, opt-in per browser from Settings (`push_subscriptions`, keyed by endpoint). On iOS the app
   must be on the Home Screen first. Logging out unsubscribes the browser.
-- A cron trigger runs every minute. Open items with a `due_time` notify at that time; timed event
+- A cron trigger runs every minute. Open items with a `due_time` notify at that time, and items due
+  on a date alone at `users.item_reminder_time` (default 09:00, null for none); timed event
   occurrences notify `users.event_reminder_minutes` early (the Settings choices are
   `EVENT_REMINDER_MINUTES` in `shared/api.ts`). Anything due in the last five minutes is sent, so a late
   run still catches up; `push_sent` keys include the target time, so each reminder goes out once and a

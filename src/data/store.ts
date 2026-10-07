@@ -69,6 +69,10 @@ export class DataStore {
     pending: 0,
   };
   private running: Promise<void> | null = null;
+  private deferred = new Map<
+    string,
+    { rows: { entity: Entity; record: EntityRecord[Entity] }[]; commit: () => void; timer: ReturnType<typeof setTimeout> }
+  >();
   private rerun = false;
 
   constructor(private options: StoreOptions = {}) {
@@ -119,13 +123,15 @@ export class DataStore {
     }
     const tables = {} as Record<Entity, Record<string, EntityRecord[Entity]>>;
     for (const e of ENTITIES) {
-      // Items cached before subtasks and repeats existed have no parent_id or rrule.
-      tables[e] = Object.fromEntries((await db.getAll(e)).map((r) => [r.id, e === "items" ? { parent_id: null, rrule: null, ...r } : r]));
+      // Items cached before subtasks, repeats and positions existed lack those fields.
+      tables[e] = Object.fromEntries((await db.getAll(e)).map((r) => [r.id, e === "items" ? { parent_id: null, rrule: null, position: null, ...r } : r]));
     }
     this.set({ tables: tables as Tables, loaded: true, pending: await db.count("outbox") });
   }
 
   async clear(): Promise<void> {
+    for (const { timer } of this.deferred.values()) clearTimeout(timer);
+    this.deferred.clear();
     const db = await this.db;
     const tx = db.transaction(STORES, "readwrite");
     await Promise.all([...STORES.map((s) => tx.objectStore(s).clear()), tx.done]);
@@ -189,12 +195,20 @@ export class DataStore {
     return writes.map(({ record }) => record);
   }
 
-  async remove(entity: Entity, id: string): Promise<void> {
-    const orphans = (CHILDREN[entity] ?? []).flatMap((child) =>
+  /** Rows whose deletion follows `id`'s (see CHILDREN). */
+  private orphansOf(entity: Entity, id: string): { entity: Entity; id: string }[] {
+    return (CHILDREN[entity] ?? []).flatMap((child) =>
       Object.values(this.snapshot.tables[child.entity])
         .filter((r) => (r as unknown as Record<string, unknown>)[child.column] === id)
         .map((r) => ({ entity: child.entity, id: r.id })),
     );
+  }
+
+  async remove(entity: Entity, id: string): Promise<void> {
+    await this.removeRows(entity, id, this.orphansOf(entity, id));
+  }
+
+  private async removeRows(entity: Entity, id: string, orphans: { entity: Entity; id: string }[]): Promise<void> {
     const db = await this.db;
     const stores = [...new Set<Entity | "outbox">([entity, ...orphans.map((o) => o.entity), "outbox"])];
     const tx = db.transaction(stores, "readwrite");
@@ -209,6 +223,53 @@ export class DataStore {
       pending: this.snapshot.pending + 1,
     });
     this.options.onWrite?.();
+  }
+
+  /**
+   * Removes a record (and its orphans) from view at once, but only deletes it after `ms`, so the
+   * returned undo can put it back: a delete that reached the server can't be undone (a delete beats
+   * a later edit). Nothing is written until then; commitRemovals() deletes early, e.g. when the
+   * page is hidden and may never come back.
+   */
+  removeLater(entity: Entity, id: string, ms: number): () => void {
+    const key = `${entity}:${id}`;
+    const rows = [{ entity, id }, ...this.orphansOf(entity, id)].flatMap((r) => {
+      const record = this.snapshot.tables[r.entity][r.id];
+      return record ? [{ entity: r.entity, record }] : [];
+    });
+    if (!rows.length) return () => undefined;
+    const commit = () => {
+      clearTimeout(timer);
+      this.deferred.delete(key);
+      void this.removeRows(entity, id, rows.slice(1).map((r) => ({ entity: r.entity, id: r.record.id })));
+    };
+    const timer = setTimeout(commit, ms);
+    this.deferred.set(key, { rows, commit, timer });
+    this.set({ tables: this.patchTables(rows.map((r) => ({ entity: r.entity, remove: r.record.id }))) });
+    return () => {
+      if (!this.deferred.has(key)) return;
+      clearTimeout(timer);
+      this.deferred.delete(key);
+      // Back as they are now in IndexedDB, which pulls kept up to date while they were hidden.
+      void (async () => {
+        const db = await this.db;
+        const current = await Promise.all(rows.map(async (r) => ({ entity: r.entity, record: await db.get(r.entity, r.record.id) })));
+        this.set({
+          tables: this.patchTables(current.flatMap((r) => (r.record ? [{ entity: r.entity, put: r.record }] : []))),
+        });
+      })();
+    };
+  }
+
+  /** Deletes every record removeLater is still holding back. */
+  commitRemovals(): void {
+    for (const { commit } of [...this.deferred.values()]) commit();
+  }
+
+  /** Whether a row is hidden by a pending removeLater. */
+  private isDeferred(entity: Entity, id: string): boolean {
+    for (const { rows } of this.deferred.values()) if (rows.some((r) => r.entity === entity && r.record.id === id)) return true;
+    return false;
   }
 
   /** Flushes the outbox, then pulls. Concurrent calls share one run and trigger one more after it. */
@@ -304,7 +365,8 @@ export class DataStore {
         if (pending.has(`${e}:${row.id}`)) continue;
         if (row.deleted_at === null) {
           ops.push(tx.objectStore(e).put(row as never));
-          changes.push({ entity: e, put: row });
+          // Waiting on removeLater: stays hidden, and comes back from IndexedDB on undo.
+          if (!this.isDeferred(e, row.id)) changes.push({ entity: e, put: row });
         } else {
           ops.push(tx.objectStore(e).delete(row.id));
           changes.push({ entity: e, remove: row.id });

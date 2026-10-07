@@ -15,6 +15,9 @@ export default defineConfig({
         start_url: "/",
         scope: "/",
         display: "standalone",
+        // Phones stay upright. Honoured by installed apps on Android; iOS has no way for a web app
+        // to lock rotation.
+        orientation: "portrait",
         background_color: "#ffffff",
         theme_color: "#ffffff",
         icons: [

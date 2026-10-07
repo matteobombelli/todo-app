@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { addDays, daysBetween, isDate } from "../../shared/dates";
+import { addDays, daysBetween, isDate, toMinutes } from "../../shared/dates";
 import type { PaletteKey } from "../../shared/palette";
 import type { Occurrence } from "../../shared/recurrence";
 import { ColorPicker } from "../components/ColorPicker";
 import { RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
 import { Checkbox } from "../components/Checkbox";
-import { useConfirm } from "../components/ConfirmDialog";
 import { Modal, useModal } from "../components/Modal";
 import { store } from "../data/instance";
 import {
@@ -16,17 +15,24 @@ import {
   type Scope,
 } from "./eventActions";
 
-function initialForm(occurrence: Occurrence | null, date: string): EventForm {
+/** HH:MM an hour after `time`, stopping at the end of the day. */
+function hourLater(time: string): string {
+  const m = Math.min(toMinutes(time) + 60, 23 * 60 + 59);
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+function initialForm(occurrence: Occurrence | null, date: string, time: string | null | undefined): EventForm {
   if (!occurrence) {
     return {
       title: "",
       notes: "",
       color: "blue",
-      all_day: false,
+      // A new event from the all-day row (time null) is all day.
+      all_day: time === null,
       start_date: date,
-      start_time: "09:00",
+      start_time: time ?? "09:00",
       end_date: date,
-      end_time: "10:00",
+      end_time: hourLater(time ?? "09:00"),
       repeat: repeatFromRRule(null, date),
     };
   }
@@ -70,14 +76,28 @@ export function ScopeDialog({ verb, onPick, onClose }: { verb: string; onPick: (
   );
 }
 
-/** Creates an event on `date` when `occurrence` is null, otherwise edits or deletes that occurrence. */
-export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurrence | null; date: string; onClose: () => void }) {
-  const [form, setForm] = useState(() => initialForm(occurrence, date));
+/**
+ * Creates an event on `date` (at `time`, or all day when it's null) when `occurrence` is null,
+ * otherwise edits or deletes that occurrence. Saves as it closes; a new event without a title is
+ * dropped, and an invalid one stays open with the problem shown.
+ */
+export function EventEditor({
+  occurrence,
+  date,
+  time,
+  onClose,
+}: {
+  occurrence: Occurrence | null;
+  date: string;
+  time?: string | null;
+  onClose: () => void;
+}) {
+  const [initial] = useState(() => initialForm(occurrence, date, time));
+  const [form, setForm] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState<"save" | "delete" | null>(null);
   const seriesRule = occurrence ? (store.get("events", occurrence.event_id)?.rrule ?? null) : null;
   const [modal, close] = useModal(onClose);
-  const [confirmDialog, confirm] = useConfirm();
 
   const set = <K extends keyof EventForm>(key: K, value: EventForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const setRepeat = (patch: Partial<RepeatForm>) => setForm((f) => ({ ...f, repeat: { ...f.repeat, ...patch } }));
@@ -97,8 +117,10 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
     close();
   }
 
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  function done() {
+    if (asking) return;
+    // Untouched, or a new event never given a title: nothing to save.
+    if (JSON.stringify(form) === JSON.stringify(initial) || (!occurrence && !form.title.trim())) return close();
     const message = validateEvent(form);
     setError(message);
     if (message) return;
@@ -107,20 +129,25 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
     else void run("save", "series");
   }
 
-  async function onDelete() {
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    done();
+  }
+
+  function onDelete() {
     if (!occurrence) return;
     if (occurrence.recurring) setAsking("delete");
-    else if (await confirm("Delete event?", `"${occurrence.title}" will be deleted.`, "Delete")) await run("delete", "series");
+    else void run("delete", "series");
   }
 
   const { repeat } = form;
   return (
     <>
-      <Modal {...modal} title={occurrence ? "Edit event" : "New event"}>
+      <Modal {...modal} onClose={done} done title={occurrence ? "Edit event" : "New event"}>
         <form className="form" onSubmit={onSubmit}>
           <label className="field">
             <span className="field__label">Title</span>
-            <input maxLength={500} value={form.title} onChange={(e) => set("title", e.target.value)} />
+            <input autoFocus={!occurrence} maxLength={500} enterKeyHint="done" value={form.title} onChange={(e) => set("title", e.target.value)} />
           </label>
           <label className="check-field">
             <Checkbox checked={form.all_day} onChange={(v) => set("all_day", v)} />
@@ -162,19 +189,13 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
             <textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
           </label>
           {error && <p className="form__error">{error}</p>}
-          <div className="form__actions">
-            {occurrence && (
-              <button type="button" className="button--danger form__actions-start" onClick={() => void onDelete()}>
+          {occurrence && (
+            <div className="form__actions">
+              <button type="button" className="button--danger form__actions-start" onClick={onDelete}>
                 Delete
               </button>
-            )}
-            <button type="button" className="button--secondary" onClick={close}>
-              Cancel
-            </button>
-            <button type="submit" className="button--primary">
-              Save
-            </button>
-          </div>
+            </div>
+          )}
         </form>
       </Modal>
       {asking && (
@@ -184,7 +205,6 @@ export function EventEditor({ occurrence, date, onClose }: { occurrence: Occurre
           onClose={() => setAsking(null)}
         />
       )}
-      {confirmDialog}
     </>
   );
 }

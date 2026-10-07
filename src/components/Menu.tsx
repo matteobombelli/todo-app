@@ -43,15 +43,15 @@ function isIcon(icon: LucideIcon | ReactNode): icon is LucideIcon {
 /**
  * A context menu, iOS style: right-click a row, or click its kebab, for its actions. Render `menu`,
  * and pass `show` the mouse event and the entries; a right-click places the menu at the pointer, a
- * click anchors it under the clicked element. Touch long-presses are left alone, since they drag rows.
+ * click anchors it under the clicked element (or, with `atPointer`, at the pointer too). Touch long-presses are left alone, since they drag rows.
  * A submenu replaces the menu's contents, with a row back to the parent.
  */
-export function useMenu(): [menu: ReactNode, show: (e: MouseEvent, entries: MenuEntry[]) => void] {
+export function useMenu(): [menu: ReactNode, show: (e: MouseEvent, entries: MenuEntry[], atPointer?: boolean) => void] {
   const [open, setOpen] = useState<Open | null>(null);
   const [shown, setShown] = useState(false);
   const count = useRef(0);
 
-  const show = useCallback((e: MouseEvent, entries: MenuEntry[]) => {
+  const show = useCallback((e: MouseEvent, entries: MenuEntry[], atPointer?: boolean) => {
     if (e.type === "contextmenu") {
       // Already handled (a long-press drag blocks it), or a touch long-press.
       if (e.defaultPrevented || (e.nativeEvent as PointerEvent).pointerType === "touch") return;
@@ -59,7 +59,8 @@ export function useMenu(): [menu: ReactNode, show: (e: MouseEvent, entries: Menu
       setOpen({ key: ++count.current, entries, at: { x: e.clientX, y: e.clientY } });
     } else {
       e.stopPropagation();
-      setOpen({ key: ++count.current, entries, at: (e.currentTarget as Element).getBoundingClientRect() });
+      const at = atPointer ? { x: e.clientX, y: e.clientY } : (e.currentTarget as Element).getBoundingClientRect();
+      setOpen({ key: ++count.current, entries, at });
     }
     setShown(true);
   }, []);

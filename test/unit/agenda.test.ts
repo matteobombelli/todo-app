@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAgenda, type ExternalEvent } from "../../shared/agenda";
 import type { Item } from "../../shared/entities";
-import { cascadeToSubtasks, isOverdue, orderItems } from "../../shared/items";
+import { cascadeToSubtasks, isOverdue, orderItems, positionAfter } from "../../shared/items";
 import type { Occurrence } from "../../shared/recurrence";
 
 let n = 0;
@@ -17,6 +17,7 @@ function item(overrides: Partial<Item> = {}): Item {
     completed_at: null,
     parent_id: null,
     rrule: null,
+    position: null,
     created_at: n,
     updated_at: n,
     seq: n,
@@ -142,6 +143,26 @@ describe("items", () => {
       [second.id, false],
       [stranded.id, false],
     ]);
+  });
+});
+
+describe("positionAfter", () => {
+  it("places a new item straight below the anchor among items due at the same slot, subtasks included", () => {
+    const parent = item();
+    const a = item({ parent_id: parent.id });
+    const b = item({ parent_id: parent.id });
+    const c = item({ parent_id: parent.id });
+    const undated = { due_date: null, due_time: null };
+    const afterA = item({ parent_id: parent.id, position: positionAfter(a, undated, [parent, a, b, c]), created_at: 100 });
+    const afterThat = item({ parent_id: parent.id, position: positionAfter(afterA, undated, [parent, a, b, c, afterA]), created_at: 101 });
+    const { open } = orderItems([parent, c, afterThat, b, afterA, a]);
+    expect(open.map(({ item }) => item.id)).toEqual([parent.id, a.id, afterA.id, afterThat.id, b.id, c.id]);
+  });
+
+  it("leaves the order to created_at when the anchor is last or due at another slot", () => {
+    const last = item();
+    expect(positionAfter(last, { due_date: null, due_time: null }, [item({ created_at: 0 }), last])).toBeNull();
+    expect(positionAfter(item({ due_date: "2026-09-01", due_time: "09:00" }), { due_date: "2026-09-01", due_time: null }, [])).toBeNull();
   });
 });
 

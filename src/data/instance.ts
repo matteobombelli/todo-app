@@ -20,13 +20,18 @@ export function startSyncLoop(): () => void {
   const run = () => void store.sync();
   const whenVisible = () => {
     if (document.visibilityState === "visible") run();
+    // A deletion waiting on its undo goes through before the app may be closed.
+    else store.commitRemovals();
   };
   run();
+  const onHide = () => store.commitRemovals();
   window.addEventListener("online", run);
+  window.addEventListener("pagehide", onHide);
   document.addEventListener("visibilitychange", whenVisible);
   const timer = setInterval(whenVisible, SYNC_INTERVAL_MS);
   return () => {
     window.removeEventListener("online", run);
+    window.removeEventListener("pagehide", onHide);
     document.removeEventListener("visibilitychange", whenVisible);
     clearInterval(timer);
   };

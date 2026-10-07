@@ -1,20 +1,21 @@
 import { ChevronLeft, ChevronRight, Ellipsis, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
-import { Fragment, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { Item } from "../../shared/entities";
 import { newId } from "../../shared/ids";
-import { orderItems } from "../../shared/items";
+import { orderItems, positionAfter } from "../../shared/items";
 import { paletteVar } from "../components/ColorPicker";
-import { useConfirm } from "../components/ConfirmDialog";
+import { useDatePicker } from "../components/DatePicker";
 import { useDropOnto, useShortcuts, useSwipe } from "../components/gestures";
 import { IconButton } from "../components/IconButton";
 import { useMenu } from "../components/Menu";
+import { removeWithUndo } from "../components/UndoToast";
 import { useData, useLists, useNow } from "../data/hooks";
 import { store } from "../data/instance";
 import { formatRelativeDate } from "../format";
 import { ItemDraft } from "./ItemDraft";
 import { ItemEditor } from "./ItemEditor";
-import { itemMenu } from "./itemMenu";
+import { dateEntries, itemMenu } from "./itemMenu";
 import { ItemRow } from "./ItemRow";
 import { ListEditor } from "./ListEditor";
 
@@ -43,8 +44,11 @@ export default function ListPage() {
   const now = useNow();
   const list = listId ? lists[listId] : undefined;
   const allLists = useLists();
-  // Where a new item is being typed: under the item with this id, or at the end (null).
-  const [draft, setDraft] = useState<{ after: string | null } | null>(null);
+  // Where a new item is being typed: under the item with this id, or at the end (null). Right after
+  // an item is added the draft moves under it, but stays under `before` until that item shows up.
+  const [draft, setDraft] = useState<{ after: string | null; before?: string | null } | null>(null);
+  // The item whose title is being edited in place, and the one whose details are open.
+  const [inline, setInline] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
   const [editingList, setEditingList] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -52,9 +56,11 @@ export default function ListPage() {
   const page = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [menu, showMenu] = useMenu();
-  const [confirmDialog, confirm] = useConfirm();
+  const [datePicker, pickDate] = useDatePicker();
 
   const openRows = useRef<HTMLUListElement>(null);
+  // A tap on blank space that ends an edit (by taking focus from its field) only ends it.
+  const fieldClosedAt = useRef(0);
   useSwipe(page, () => navigate("/todo"), 24);
   useShortcuts({ n: () => setDraft({ after: null }) });
 
@@ -105,9 +111,11 @@ export default function ListPage() {
 
   if (!list) return <Navigate to="/todo" replace />;
 
-  // A new item goes in as a sibling of the one tapped: a subtask under a subtask, and due the same
-  // day, so it sorts beside it. Its place in the list still comes from the usual order.
-  const anchorIndex = draft?.after ? open.findIndex((o) => o.item.id === draft.after) : -1;
+  // A new item goes in as a sibling of the one it follows: a subtask under a subtask, and due the
+  // same day, so it sorts beside it; its position puts it straight below.
+  const indexOf = (id: string | null | undefined) => (id ? open.findIndex((o) => o.item.id === id) : -1);
+  let anchorIndex = indexOf(draft?.after);
+  if (anchorIndex < 0) anchorIndex = indexOf(draft?.before);
   const anchor = anchorIndex >= 0 ? open[anchorIndex] : null;
   // Under a parent, the draft goes after its subtasks.
   let draftIndex = anchorIndex;
@@ -119,8 +127,12 @@ export default function ListPage() {
 
   function onAdd(title: string) {
     if (!list) return;
+    const id = newId();
+    const position = anchor
+      ? positionAfter(anchor.item, { due_date: inherited.due_date, due_time: null }, open.map((o) => o.item))
+      : null;
     void store.upsert("items", {
-      id: newId(),
+      id,
       list_id: list.id,
       title,
       notes: "",
@@ -129,22 +141,34 @@ export default function ListPage() {
       completed_at: null,
       parent_id: inherited.parent_id,
       rrule: null,
+      position,
     });
+    // The next one goes under this one.
+    if (draft) setDraft({ after: id, before: anchor?.item.id ?? null });
   }
 
   const draftRow = draft && (
-    <li key={`draft:${draft.after}`} className="rows__draft">
+    <li key="draft" className="rows__draft">
       <ItemDraft
         nested={!!inherited.parent_id}
         chip={inherited.due_date && formatRelativeDate(inherited.due_date, now.date)}
         onAdd={onAdd}
-        onClose={() => setDraft((d) => (d === draft ? null : d))}
+        onClose={() => {
+          closeField();
+          setDraft((d) => (d === draft ? null : d));
+        }}
       />
     </li>
   );
 
-  const onItemMenu = (e: MouseEvent, item: Item) =>
-    showMenu(e, itemMenu(item, { lists: allLists, items, onEdit: setEditing, confirm }));
+  const startDraft = (after: string | null) => {
+    setInline(null);
+    setDraft({ after });
+  };
+  const closeField = () => (fieldClosedAt.current = Date.now());
+  const tapBlank = () => Date.now() - fieldClosedAt.current > 500 && startDraft(null);
+  const onItemMenu = (e: MouseEvent, item: Item) => showMenu(e, itemMenu(item, { lists: allLists, onEdit: setEditing, pickDate }));
+  const onDateMenu = (e: MouseEvent, item: Item) => showMenu(e, dateEntries(item, pickDate));
 
   const onListMenu = (e: MouseEvent) =>
     showMenu(e, [
@@ -163,12 +187,7 @@ export default function ListPage() {
         label: "Delete List",
         icon: Trash2,
         destructive: true,
-        onSelect: () =>
-          void (async () => {
-            if (await confirm("Delete list?", `"${list.name}" and all its items will be deleted.`, "Delete")) {
-              await store.remove("lists", list.id);
-            }
-          })(),
+        onSelect: () => removeWithUndo("lists", list.id, `Deleted "${list.name}"`),
       },
     ]);
 
@@ -178,7 +197,7 @@ export default function ListPage() {
       ref={page}
       style={{ "--list": paletteVar(list.color) } as CSSProperties}
       // Blank space below everything is a blank line too.
-      onClick={(e) => e.target === e.currentTarget && !draft && setDraft({ after: null })}
+      onClick={(e) => e.target === e.currentTarget && !draft && !inline && tapBlank()}
     >
       <div className="nav-bar">
         <IconButton icon={ChevronLeft} label="All lists" to="/todo" nav="pop" className="page__back" />
@@ -189,32 +208,51 @@ export default function ListPage() {
       </h1>
 
       <ul className="rows rows--large" ref={openRows}>
-        {open.map(({ item, nested }, i) => {
+        {open.flatMap(({ item, nested }, i) => {
           const hidden = nested && collapsed.has(item.parent_id!);
           const count = openSubtasks.get(item.id);
-          return (
-            <Fragment key={item.id}>
-              <li data-id={item.id} className={hidden ? "rows__hidden" : undefined}>
-                <ItemRow
-                  item={item}
-                  now={now}
-                  nested={nested}
-                  hidden={hidden}
-                  fold={count ? { count, collapsed: collapsed.has(item.id), onToggle: () => setFolded(item.id, !collapsed.has(item.id)) } : undefined}
-                  collapseOnDone
-                  onTap={(tapped) => setDraft({ after: tapped.id })}
-                  onMenu={onItemMenu}
-                />
-              </li>
-              {i === draftIndex && draftRow}
-            </Fragment>
+          const row = (
+            <li key={item.id} data-id={item.id} className={hidden ? "rows__hidden" : undefined}>
+              <ItemRow
+                item={item}
+                now={now}
+                nested={nested}
+                hidden={hidden}
+                fold={count ? { count, collapsed: collapsed.has(item.id), onToggle: () => setFolded(item.id, !collapsed.has(item.id)) } : undefined}
+                collapseOnDone
+                swipe
+                onTap={(tapped) => {
+                  setDraft(null);
+                  setInline(tapped.id);
+                }}
+                onMenu={onItemMenu}
+                onDateMenu={onDateMenu}
+                edit={
+                  inline === item.id
+                    ? {
+                        onReturn: (edited) => startDraft(edited.id),
+                        onDone: () => {
+                          closeField();
+                          setInline((id) => (id === item.id ? null : id));
+                        },
+                        onDetails: (edited) => {
+                          setInline(null);
+                          setEditing(store.get("items", edited.id) ?? edited);
+                        },
+                      }
+                    : undefined
+                }
+              />
+            </li>
           );
+          // Flat and keyed, so the draft keeps its field (and the keyboard) as items land above it.
+          return i === draftIndex && draftRow ? [row, draftRow] : [row];
         })}
         {draftIndex < 0 && draftRow}
       </ul>
       {/* The space under the rows: tapping it starts an item at the end, like a blank line. */}
       {!draft && (
-        <button type="button" className={`rows__tail${open.length ? "" : " rows__tail--empty"}`} onClick={() => setDraft({ after: null })}>
+        <button type="button" className={`rows__tail${open.length ? "" : " rows__tail--empty"}`} onClick={tapBlank}>
           {open.length === 0 && (
             <>
               <span className="check" aria-hidden="true">
@@ -241,6 +279,8 @@ export default function ListPage() {
                     item={item}
                     now={now}
                     context={item.parent_id ? items[item.parent_id]?.title : undefined}
+                    swipe
+                    onTap={setEditing}
                     onMenu={onItemMenu}
                   />
                 </li>
@@ -259,7 +299,7 @@ export default function ListPage() {
         />
       )}
       {menu}
-      {confirmDialog}
+      {datePicker}
     </div>
   );
 }

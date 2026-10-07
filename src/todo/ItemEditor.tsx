@@ -1,58 +1,91 @@
 import { useMemo, useState, type FormEvent } from "react";
 import type { Item } from "../../shared/entities";
-import { useConfirm } from "../components/ConfirmDialog";
+import { newId } from "../../shared/ids";
 import { Modal, useModal } from "../components/Modal";
 import { RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
 import { localNow, useData, useLists } from "../data/hooks";
 import { store } from "../data/instance";
+import { deleteItem } from "./itemMenu";
 
-export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void }) {
+/**
+ * An item's details. Saves as it closes (Done, a tap outside, Escape or a swipe down), so there is
+ * no Save or Cancel; a blank title keeps the old one. With `item` null it creates one from `initial`
+ * (the calendar's new to-do), and closing with no title adds nothing.
+ */
+export function ItemEditor({
+  item,
+  initial,
+  onClose,
+}: {
+  item: Item | null;
+  initial?: { list_id: string; due_date: string | null; due_time: string | null };
+  onClose: () => void;
+}) {
   const lists = useLists();
   const { items } = useData().tables;
-  const [title, setTitle] = useState(item.title);
-  const [notes, setNotes] = useState(item.notes);
-  const [dueDate, setDueDate] = useState(item.due_date ?? "");
-  const [dueTime, setDueTime] = useState(item.due_time ?? "");
-  const [repeat, setRepeat] = useState(() => repeatFromRRule(item.rrule, item.due_date ?? localNow().date));
-  const [listId, setListId] = useState(item.list_id);
+  const [id] = useState(() => item?.id ?? newId());
+  const [title, setTitle] = useState(item?.title ?? "");
+  const [notes, setNotes] = useState(item?.notes ?? "");
+  const [dueDate, setDueDate] = useState(item?.due_date ?? initial?.due_date ?? "");
+  const [dueTime, setDueTime] = useState(item?.due_time ?? initial?.due_time ?? "");
+  const [repeat, setRepeat] = useState(() => repeatFromRRule(item?.rrule ?? null, item?.due_date ?? initial?.due_date ?? localNow().date));
+  const [listId, setListId] = useState(item?.list_id ?? initial?.list_id ?? lists[0]?.id ?? "");
   const [modal, close] = useModal(onClose);
-  const [confirmDialog, confirm] = useConfirm();
 
-  const subtaskCount = useMemo(() => Object.values(items).filter((i) => i.parent_id === item.id).length, [items, item.id]);
+  const subtaskCount = useMemo(() => Object.values(items).filter((i) => i.parent_id === id).length, [items, id]);
+  const parentId = item?.parent_id ?? null;
 
   // Repeating items are never subtasks or parents (see completeItem).
-  const canRepeat = item.parent_id === null && subtaskCount === 0 && dueDate !== "";
+  const canRepeat = parentId === null && subtaskCount === 0 && dueDate !== "";
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    await store.upsert("items", {
-      ...item,
-      title: title.trim(),
+  function save() {
+    // The record as it is now: a sync, or a swipe in the list behind, may have changed it.
+    const current = store.get("items", id);
+    if (item && !current) return; // Deleted meanwhile.
+    const trimmed = title.trim();
+    if (!trimmed && !current) return;
+    const next = {
+      id,
+      completed_at: null,
+      position: null,
+      ...current,
+      title: trimmed || current!.title,
       notes,
       due_date: dueDate || null,
       due_time: dueDate && dueTime ? dueTime : null,
       rrule: canRepeat ? repeatToRRule(repeat) : null,
       list_id: listId,
       // A subtask moved to another list on its own leaves its parent behind.
-      parent_id: listId === item.list_id ? item.parent_id : null,
-    });
+      parent_id: current && listId === current.list_id ? current.parent_id : null,
+    };
+    const changed =
+      !current ||
+      (["title", "notes", "due_date", "due_time", "rrule", "list_id", "parent_id"] as const).some((k) => next[k] !== current[k]);
+    if (changed && listId) void store.upsert("items", next);
+  }
+
+  function done() {
+    save();
     close();
   }
 
-  async function onDelete() {
-    const detail = subtaskCount ? ` with its ${subtaskCount === 1 ? "subtask" : `${subtaskCount} subtasks`}` : "";
-    if (!(await confirm("Delete item?", `"${item.title}"${detail} will be deleted.`, "Delete"))) return;
-    await store.remove("items", item.id);
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    done();
+  }
+
+  function onDelete() {
+    const current = store.get("items", id);
+    if (current) deleteItem(current);
     close();
   }
 
   return (
-    <Modal {...modal} title="Edit item">
-      <form className="form" onSubmit={(e) => void onSubmit(e)}>
+    <Modal {...modal} onClose={done} done title={item ? "Details" : "New to-do"}>
+      <form className="form" onSubmit={onSubmit}>
         <label className="field">
           <span className="field__label">Title</span>
-          <input required maxLength={500} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input autoFocus={!item} maxLength={500} enterKeyHint="done" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
         <label className="field">
           <span className="field__label">Notes</span>
@@ -81,19 +114,14 @@ export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void 
             ))}
           </select>
         </label>
-        <div className="form__actions">
-          <button type="button" className="button--danger form__actions-start" onClick={() => void onDelete()}>
-            Delete
-          </button>
-          <button type="button" className="button--secondary" onClick={close}>
-            Cancel
-          </button>
-          <button type="submit" className="button--primary">
-            Save
-          </button>
-        </div>
+        {item && (
+          <div className="form__actions">
+            <button type="button" className="button--danger form__actions-start" onClick={onDelete}>
+              Delete
+            </button>
+          </div>
+        )}
       </form>
-      {confirmDialog}
     </Modal>
   );
 }
