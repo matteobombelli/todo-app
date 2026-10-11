@@ -37,6 +37,14 @@ function errorRedirect(req: AuthRequest, code: string): Response {
   return Response.redirect(redirect.toString(), 302);
 }
 
+function safeHost(uri: string): string {
+  try {
+    return new URL(uri).host || uri;
+  } catch {
+    return uri;
+  }
+}
+
 export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<Response> {
   const url = new URL(request.url);
   let oauthRequest: AuthRequest;
@@ -77,10 +85,13 @@ export async function handleAuthorize(request: Request, env: OAuthEnv): Promise<
     return Response.redirect(redirectTo, 302);
   }
 
+  // Any client can register under any name, so the page also says where access will be sent.
+  const redirectHost = safeHost(oauthRequest.redirectUri);
   return page(
     "Allow access",
     `<h1>Allow ${escape(clientName)}?</h1>
 <p>It will be able to read and change your lists, items and calendar events, and read your Save the Date dates.</p>
+<p>Access will be sent to <strong>${escape(redirectHost)}</strong>. Only allow it if you started this from there.</p>
 <p class="muted">Signed in as ${escape(user.email)}</p>
 <form method="post"><button name="decision" value="deny">Deny</button><button name="decision" value="allow">Allow</button></form>`,
   );

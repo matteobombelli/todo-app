@@ -47,7 +47,14 @@ export async function dueReminders(db: D1Database, at: Date): Promise<Reminder[]
     .prepare("SELECT id, timezone, event_reminder_minutes, item_reminder_time FROM users WHERE id IN (SELECT user_id FROM push_subscriptions)")
     .all<PushUser>();
   const out: Reminder[] = [];
-  for (const user of users) out.push(...(await userReminders(db, user, at)));
+  // One user's bad data (or a failed query) mustn't hold back everyone else's reminders.
+  for (const user of users) {
+    try {
+      out.push(...(await userReminders(db, user, at)));
+    } catch (err) {
+      console.error("reminders failed for user", user.id, err);
+    }
+  }
   return out;
 }
 
@@ -66,7 +73,7 @@ async function userReminders(db: D1Database, user: PushUser, at: Date): Promise<
     db
       .prepare(
         `SELECT i.*, l.name AS list_name FROM items i JOIN lists l ON l.id = i.list_id
-         WHERE i.user_id = ? AND i.deleted_at IS NULL AND i.completed_at IS NULL
+         WHERE i.user_id = ? AND i.deleted_at IS NULL AND l.deleted_at IS NULL AND i.completed_at IS NULL
            AND (i.due_time IS NOT NULL OR ? IS NOT NULL) AND i.due_date BETWEEN ? AND ?`,
       )
       .bind(user.id, user.item_reminder_time, yesterday, now.date)
@@ -140,6 +147,6 @@ async function send(db: D1Database, vapid: VapidKeys, sub: SubscriptionRow, r: R
   if (res.status === 404 || res.status === 410) {
     await db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").bind(sub.endpoint).run();
   } else if (!res.ok) {
-    console.error("push rejected", res.status, await res.text());
+    console.error("push rejected", res.status, (await res.text()).slice(0, 500));
   }
 }

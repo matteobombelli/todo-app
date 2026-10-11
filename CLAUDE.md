@@ -13,7 +13,11 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 - `npm test`: `vite build` then Vitest. Projects: `unit` (`test/unit/`, node; `test/unit/client/` uses
   fake-indexeddb) and `worker` (`test/worker/`, inside workerd via `@cloudflare/vitest-plugin`, migrations
   applied per file, the `STD` service binding replaced by `test/std-mock.ts`).
-- `npm run typecheck`: `tsc -b` over app, worker, worker tests and client tests.
+- `npm run test:e2e`: Playwright (`e2e/`, `playwright.config.ts`) against `npm run dev` on :8787,
+  reusing one that's already running (restart it after changing code: it serves the build it made).
+  Each test signs up its own user with the invite code from `.dev.vars` and seeds records through
+  `/api/mutations`; projects `desktop` and `mobile` (Pixel 7, touch). Service workers are blocked.
+- `npm run typecheck`: `tsc -b` over app, worker, worker tests, client tests and e2e.
 - `npm run types`: regenerate `worker-configuration.d.ts` after editing `wrangler.jsonc` or `.dev.vars`.
 - `npm run icons`: regenerate `public/` icons (`scripts/generate-icons.mjs`, needs `sharp`).
 - `npm run deploy`: build, apply remote migrations, `wrangler deploy`.
@@ -68,7 +72,10 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
   one to arrive wins. A delete beats a later edit. Rejected ops return the server copy (`current`), which
   the client puts in place of its optimistic one.
 - The client (`src/data/store.ts`) writes to memory and IndexedDB first and queues the mutation in the
-  `outbox`; `sync()` flushes the outbox, then pulls. A pulled row never overwrites a record with a
+  `outbox`; `sync()` flushes the outbox, then pulls. Each tab keeps its own cursor (read on `load()`),
+  so one tab's pull never hides rows from another. A rejected op makes the next pull a full one
+  (since=0), undoing local side effects the server never made. `settled` turns true once the first
+  sync after `load()` has finished, so a record missing before that may still be on its way. A pulled row never overwrites a record with a
   queued mutation. Sync runs on start, `online`, becoming visible, 300 ms after a write, and every
   minute while visible (no Background Sync API: iOS lacks it).
 - MCP writes go through `applyMutations`, the batch form of `applyMutation` with the same checks, so
@@ -92,6 +99,13 @@ forward: `completeItem` (used by the app and MCP `update_item`, not by the serve
 `completed_at`. `COUNT` is the occurrences left, so each roll decrements it; once `UNTIL` has passed or
 `COUNT` reaches 1 the item completes normally. Repeating items need a `due_date` and can neither be
 subtasks nor have them (checked by the schema and `subtaskProblem`). No completion history is kept.
+
+## Dates
+
+Dates are limited to years 1900–2199 (`isDate`): `Date.UTC` reads years 0–99 as the 1900s, and a
+series starting centuries away costs every expansion a walk across them. Repeat rules can't end
+before their start (`ItemFields`, `EventFields`). Only live exceptions are unique per occurrence
+(migration 0006), so a deleted one doesn't block a new one; moving a series moves its exceptions.
 
 ## Time
 

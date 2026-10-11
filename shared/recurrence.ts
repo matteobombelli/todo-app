@@ -25,7 +25,8 @@ const FREQS: Freq[] = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"];
 export function parseRRule(s: string): RRule {
   const rule: RRule = { freq: "DAILY", interval: 1, byDay: [], until: null, count: null };
   const seen = new Set<string>();
-  for (const part of s.replace(/^RRULE:/, "").split(";")) {
+  // Empty parts (a trailing ";") are ignored, as clients often send them.
+  for (const part of s.replace(/^RRULE:/, "").split(";").filter(Boolean)) {
     const [key, value, extra] = part.split("=");
     if (!value || extra !== undefined || seen.has(key)) throw new Error(`Bad RRULE part: ${part}`);
     seen.add(key);
@@ -41,7 +42,8 @@ export function parseRRule(s: string): RRule {
         rule.count = positiveInt(value, 10_000);
         break;
       case "UNTIL": {
-        const date = /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}` : "";
+        // A date-time UNTIL (20261231T235959Z) keeps its date: occurrences are floating dates.
+        const date = /^\d{8}(T\d{6}Z?)?$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : "";
         if (!isDate(date)) throw new Error(`Bad UNTIL: ${value}`);
         rule.until = date;
         break;
@@ -88,8 +90,12 @@ export function shiftRRule(rrule: string | null, days: number): string | null {
   return serializeRRule({ ...rule, byDay: rule.byDay.map((d) => (((d + days) % 7) + 7) % 7).sort((a, b) => a - b) });
 }
 
-/** Dates the rule generates from start through limit (inclusive), in order. */
-export function ruleDates(start: string, rule: RRule, limit: string): string[] {
+/**
+ * Dates the rule generates from start through limit (inclusive), in order. With `from`, dates
+ * before it may be left out: a daily or weekly rule without COUNT jumps ahead rather than walking
+ * from a start years back (COUNT needs every date counted).
+ */
+export function ruleDates(start: string, rule: RRule, limit: string, from?: string): string[] {
   const end = rule.until && rule.until < limit ? rule.until : limit;
   const out: string[] = [];
   let generated = 0;
@@ -105,14 +111,18 @@ export function ruleDates(start: string, rule: RRule, limit: string): string[] {
   const [y0, m0, d0] = start.split("-").map(Number);
   const startDay = toDayNumber(start);
   const endDay = toDayNumber(end);
+  const skip = from !== undefined && rule.count === null ? Math.max(0, toDayNumber(from) - startDay) : 0;
   switch (rule.freq) {
     case "DAILY":
-      for (let day = startDay; day <= endDay; day += rule.interval) if (!emit(fromDayNumber(day))) break;
+      for (let day = startDay + Math.floor(skip / rule.interval) * rule.interval; day <= endDay; day += rule.interval) {
+        if (!emit(fromDayNumber(day))) break;
+      }
       break;
     case "WEEKLY": {
       const days = rule.byDay.length ? rule.byDay : [weekday(start)];
       const monday = startDay - weekday(start);
-      outer: for (let week = monday; week <= endDay; week += 7 * rule.interval) {
+      const period = 7 * rule.interval;
+      outer: for (let week = monday + Math.floor(skip / period) * period; week <= endDay; week += period) {
         for (const wd of days) {
           if (week + wd < startDay) continue;
           if (!emit(fromDayNumber(week + wd))) break outer;
@@ -226,14 +236,19 @@ export function expandOccurrences(
 
   const byDate = new Map<string, OccurrenceException>();
   for (const x of exceptions) if (x.event_id === event.id && x.deleted_at === null) byDate.set(x.occurrence_date, x);
-  // A moved occurrence can land in range from an original date outside it, so generate far enough
-  // to reach every exception.
-  let limit = to;
-  for (const date of byDate.keys()) if (date > limit) limit = date;
-
   const earliest = addDays(from, -span);
+  // A moved occurrence can land in range from an original date outside it, so generation reaches
+  // the original dates of those that do (only those: any other exception can't show up here).
+  let first = earliest;
+  let limit = to;
+  for (const x of byDate.values()) {
+    if (x.cancelled || x.start_date === null || x.end_date === null || x.start_date > to || x.end_date < from) continue;
+    if (x.occurrence_date < first) first = x.occurrence_date;
+    if (x.occurrence_date > limit) limit = x.occurrence_date;
+  }
+
   const out: Occurrence[] = [];
-  for (const date of ruleDates(event.start_date, parseRRule(event.rrule), limit)) {
+  for (const date of ruleDates(event.start_date, parseRRule(event.rrule), limit, first)) {
     const x = byDate.get(date);
     if (!x) {
       if (date >= earliest && date <= to) out.push(at(date));

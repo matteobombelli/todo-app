@@ -3,7 +3,7 @@ import { addDays, daysBetween, isDate, toMinutes } from "../../shared/dates";
 import type { PaletteKey } from "../../shared/palette";
 import type { Occurrence } from "../../shared/recurrence";
 import { ColorPicker } from "../components/ColorPicker";
-import { RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
+import { followStart, RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
 import { Checkbox } from "../components/Checkbox";
 import { Modal, useModal } from "../components/Modal";
 import { store } from "../data/instance";
@@ -46,7 +46,7 @@ function initialForm(occurrence: Occurrence | null, date: string, time: string |
     start_time: occurrence.start_time ?? "09:00",
     end_date: occurrence.end_date,
     end_time: occurrence.end_time ?? "10:00",
-    repeat: repeatFromRRule(event?.rrule ?? null, occurrence.start_date),
+    repeat: repeatFromRRule(event?.rrule ?? null, occurrence.occurrence_date),
   };
 }
 
@@ -96,7 +96,6 @@ export function EventEditor({
   const [form, setForm] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState<"save" | "delete" | null>(null);
-  const seriesRule = occurrence ? (store.get("events", occurrence.event_id)?.rrule ?? null) : null;
   const [modal, close] = useModal(onClose);
   // Set while a save or delete is being written, so a second Return or Done can't apply it twice.
   const running = useRef(false);
@@ -109,7 +108,7 @@ export function EventEditor({
     setForm((f) => {
       if (!isDate(value) || !isDate(f.start_date)) return { ...f, start_date: value };
       const span = f.end_date >= f.start_date ? daysBetween(f.start_date, f.end_date) : 0;
-      return { ...f, start_date: value, end_date: addDays(value, span) };
+      return { ...f, start_date: value, end_date: addDays(value, span), repeat: followStart(f.repeat, f.start_date, value) };
     });
   }
 
@@ -117,7 +116,7 @@ export function EventEditor({
     if (running.current) return;
     running.current = true;
     try {
-      if (action === "save") await saveEvent(form, occurrence, scope);
+      if (action === "save") await saveEvent(form, occurrence, scope, initial);
       else if (occurrence) await deleteEvent(occurrence, scope);
     } catch (e) {
       // Not written: let it be tried again. On success it stays set while the editor closes.
@@ -135,7 +134,7 @@ export function EventEditor({
     setError(message);
     if (message) return;
     // A changed repeat rule only makes sense for the series.
-    if (occurrence?.recurring && repeatToRRule(form.repeat) === seriesRule) setAsking("save");
+    if (occurrence?.recurring && repeatToRRule(form.repeat) === repeatToRRule(initial.repeat)) setAsking("save");
     else void run("save", "series");
   }
 
@@ -198,7 +197,15 @@ export function EventEditor({
             <span className="field__label">Notes</span>
             <textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
           </label>
-          {error && <p className="form__error">{error}</p>}
+          {error && (
+            <div className="form__error" role="alert">
+              <p>{error}</p>
+              {/* Closing keeps trying to save; this is the way out without fixing the form. */}
+              <button type="button" className="button--plain" onClick={close}>
+                Discard changes
+              </button>
+            </div>
+          )}
           {occurrence && (
             <div className="form__actions">
               <button type="button" className="button--danger form__actions-start" onClick={onDelete}>

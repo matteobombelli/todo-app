@@ -18,21 +18,26 @@ export const store = new DataStore({
 // every minute while visible, so changes made through MCP show up without a reload.
 export function startSyncLoop(): () => void {
   const run = () => void store.sync();
+  // Leaving the app may be the last chance to sync for a while (iOS suspends it, and the write
+  // debounce never fires): deletions waiting on their undo go through, then everything is sent.
+  const onHide = () => {
+    clearTimeout(writeTimer);
+    void store.commitRemovals().then(run);
+  };
   const whenVisible = () => {
     if (document.visibilityState === "visible") run();
-    // A deletion waiting on its undo goes through before the app may be closed.
-    else store.commitRemovals();
+    else onHide();
   };
   run();
-  const onHide = () => store.commitRemovals();
   window.addEventListener("online", run);
   window.addEventListener("pagehide", onHide);
   document.addEventListener("visibilitychange", whenVisible);
-  const timer = setInterval(whenVisible, SYNC_INTERVAL_MS);
+  const timer = setInterval(() => document.visibilityState === "visible" && run(), SYNC_INTERVAL_MS);
   return () => {
     window.removeEventListener("online", run);
     window.removeEventListener("pagehide", onHide);
     document.removeEventListener("visibilitychange", whenVisible);
     clearInterval(timer);
+    clearTimeout(writeTimer);
   };
 }

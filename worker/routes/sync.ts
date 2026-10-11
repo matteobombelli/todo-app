@@ -17,7 +17,13 @@ export function registerSyncRoutes(r: Router): void {
     const user = await requireUser(c);
     const { mutations } = await parseJson(c.req, MutationBatch);
     const results: MutationResult[] = [];
-    for (const m of mutations) results.push(await applyMutation(c.env.DB, user.id, m));
+    // Each op gets a later timestamp than the one before, even within a millisecond: items without
+    // a position sort by created_at, and equal stamps left them to their random ids.
+    let now = 0;
+    for (const m of mutations) {
+      now = Math.max(Date.now(), now + 1);
+      results.push(await applyMutation(c.env.DB, user.id, m, now));
+    }
     c.exec.waitUntil(pruneAppliedOps(c.env.DB));
     return json({ results });
   });

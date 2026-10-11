@@ -32,6 +32,11 @@ function DateSheet({ initial, onPick, onClose }: { initial: string; onPick: OnPi
   const [cursor, setCursor] = useState(initial);
   const grid = useRef<HTMLDivElement>(null);
   const keyed = useRef(false);
+  // The initial day takes focus as the sheet opens, not each time its month comes round again.
+  const opening = useRef(true);
+  useEffect(() => {
+    opening.current = false;
+  }, []);
   const weeks = monthWeeks(cursor);
   const month = cursor.slice(0, 7);
 
@@ -92,7 +97,7 @@ function DateSheet({ initial, onPick, onClose }: { initial: string; onPick: OnPi
                     aria-label={formatLongDate(date)}
                     // One tab stop in the grid; the arrow keys move within it.
                     tabIndex={date === cursor ? 0 : -1}
-                    autoFocus={date === initial}
+                    autoFocus={opening.current && date === initial}
                     onClick={() => choose(date)}
                   >
                     <span className="date-sheet__num">{Number(date.slice(8))}</span>

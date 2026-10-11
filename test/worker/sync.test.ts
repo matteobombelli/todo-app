@@ -101,6 +101,15 @@ describe("sync and mutations", () => {
     expect(s.lists[0].name).toBe("Groceries");
   });
 
+  it("stamps records sent together with increasing created_at, so unplaced items keep their order", async () => {
+    const cookie = await login();
+    const l = list();
+    const items = Array.from({ length: 6 }, (_, i) => item(l.id, { title: `Item ${i}` }));
+    await mutate(cookie, [upsert("lists", l), ...items.map((i) => upsert("items", i))]);
+    const stamps = (await sync(cookie)).items.sort((a, b) => a.title.localeCompare(b.title)).map((i) => i.created_at);
+    for (let i = 1; i < stamps.length; i++) expect(stamps[i]).toBeGreaterThan(stamps[i - 1]);
+  });
+
   it("cascades a list deletion to its items", async () => {
     const cookie = await login();
     const l = list();
@@ -148,13 +157,19 @@ describe("sync and mutations", () => {
     expect(s0.events[0]).toMatchObject({ all_day: false, rrule: e.rrule });
     expect(s0.event_exceptions[0]).toMatchObject({ cancelled: true, all_day: null });
 
-    // A second exception for the same occurrence is rejected.
+    // A second live exception for the same occurrence is rejected, answered with the live one.
     const [dup] = await mutate(cookie, [upsert("event_exceptions", { ...x, id: id() })]);
-    expect(dup).toMatchObject({ status: "rejected", current: null });
+    expect(dup).toMatchObject({ status: "rejected", current: { id: x.id, cancelled: true } });
+
+    // Once that one is deleted (an undone cancellation), the occurrence can have a new one.
+    await mutate(cookie, [del("event_exceptions", x.id)]);
+    const again = { ...x, id: id(), cancelled: false, title: "Late gym" };
+    const [fresh] = await mutate(cookie, [upsert("event_exceptions", again)]);
+    expect(fresh).toMatchObject({ status: "applied" });
 
     await mutate(cookie, [del("events", e.id)]);
     const s1 = await sync(cookie, s0.cursor);
-    expect(s1.event_exceptions[0].deleted_at).not.toBeNull();
+    expect(s1.event_exceptions.every((ex) => ex.deleted_at !== null)).toBe(true);
   });
 
   it("rejects invalid records and returns the server copy", async () => {

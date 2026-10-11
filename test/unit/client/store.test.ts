@@ -292,8 +292,8 @@ describe("DataStore", () => {
     await store.load("u1");
     const l = await store.upsert("lists", listFields());
     const undo = store.removeLater("lists", l.id, 60_000);
-    store.commitRemovals();
-    await vi.waitFor(() => expect(store.getSnapshot().pending).toBe(2));
+    await store.commitRemovals();
+    expect(store.getSnapshot().pending).toBe(2);
     undo();
     await new Promise((r) => setTimeout(r, 10));
     expect(store.getSnapshot().tables.lists[l.id]).toBeUndefined();
@@ -328,5 +328,71 @@ describe("DataStore", () => {
     release();
     await Promise.all([first, second, third]);
     expect(calls.map((c) => c.path)).toEqual(["/sync?since=0", "/sync?since=0"]);
+  });
+  it("keeps a cursor per instance, so one tab's pull doesn't hide rows from another", async () => {
+    const fromClaude = serverList({ name: "From Claude", seq: 5 });
+    const a = fakeServer([syncResponse({ cursor: 5, lists: [fromClaude] })]);
+    const b = fakeServer([syncResponse({ cursor: 5, lists: [fromClaude] })]);
+    const tabA = makeStore(a.fetch, "two-tabs");
+    const tabB = makeStore(b.fetch, "two-tabs");
+    await tabA.load("u1");
+    await tabB.load("u1");
+    await tabA.sync();
+    await tabB.sync();
+    // B still asks from where it was, and gets the row A already pulled.
+    expect(b.calls.map((c) => c.path)).toEqual(["/sync?since=0"]);
+    expect(tabB.getSnapshot().tables.lists[fromClaude.id].name).toBe("From Claude");
+  });
+
+  it("pulls everything again after a rejected write, undoing its local side effects", async () => {
+    const parentServer = serverList({ seq: 2 });
+    const { fetch, calls } = fakeServer([
+      syncResponse({ cursor: 4 }),
+      (call) => {
+        const [m] = (call.body as { mutations: { op_id: string }[] }).mutations;
+        return Response.json({ results: [{ op_id: m.op_id, status: "rejected", error: "Invalid", current: parentServer }] });
+      },
+      syncResponse({ cursor: 4, lists: [parentServer] }),
+    ]);
+    const store = makeStore(fetch);
+    await store.load("u1");
+    await store.sync();
+    await store.upsert("lists", { ...listFields(), id: parentServer.id, name: "Local" });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await store.sync();
+    expect(calls.map((c) => c.path)).toEqual(["/sync?since=0", "/mutations", "/sync?since=0"]);
+  });
+
+  it("drops the results of a sync that was in flight when the mirror was cleared", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const leaked = serverList({ name: "Previous user's" });
+    const { fetch } = fakeServer([
+      async () => {
+        await gate;
+        return syncResponse({ cursor: 9, lists: [leaked] })();
+      },
+    ]);
+    const store = makeStore(fetch, "cleared-mid-sync");
+    await store.load("u1");
+    const syncing = store.sync();
+    await store.clear();
+    release();
+    await syncing;
+    expect(store.getSnapshot().tables.lists).toEqual({});
+    const reopened = makeStore(fetch, "cleared-mid-sync");
+    await reopened.load("u1");
+    expect(reopened.getSnapshot().tables.lists).toEqual({});
+  });
+
+  it("is settled once the first sync after loading has finished, even offline", async () => {
+    const { fetch } = fakeServer([offline]);
+    const store = makeStore(fetch);
+    await store.load("u1");
+    expect(store.getSnapshot().settled).toBe(false);
+    await store.sync();
+    expect(store.getSnapshot()).toMatchObject({ settled: true, status: "offline" });
+    await store.clear();
+    expect(store.getSnapshot()).toMatchObject({ settled: false, loaded: false });
   });
 });

@@ -48,6 +48,13 @@ export function Modal({ open, onClose, onExited, title, variant = "panel", done,
   });
   const present = usePresence(open, dialog);
   const shown = useRef(false);
+  // Whatever had focus as the modal opened, read while rendering: by the time an effect runs, a
+  // field inside with autoFocus has already taken it.
+  const wasOpen = useRef(false);
+  if (open !== wasOpen.current) {
+    wasOpen.current = open;
+    if (open && typeof document !== "undefined") opener.current = document.activeElement;
+  }
 
   useEffect(() => {
     if (present) shown.current = true;
@@ -61,7 +68,6 @@ export function Modal({ open, onClose, onExited, title, variant = "panel", done,
   // opened the modal.
   useEffect(() => {
     if (!open) return;
-    opener.current = document.activeElement;
     if (!dialog.current?.contains(document.activeElement)) header.current?.querySelector("button")?.focus();
     return () => {
       if (opener.current instanceof HTMLElement) opener.current.focus();
@@ -74,7 +80,24 @@ export function Modal({ open, onClose, onExited, title, variant = "panel", done,
     const id = Symbol();
     stack.push(id);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && stack.at(-1) === id) closeRef.current();
+      if (stack.at(-1) !== id) return;
+      if (e.key === "Escape") closeRef.current();
+      // Tab stays inside the modal (it's aria-modal; the page behind is out of reach).
+      if (e.key === "Tab" && dialog.current) {
+        const focusable = [...dialog.current.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]")].filter(
+          (el) => !el.hasAttribute("disabled") && el.tabIndex >= 0 && el.offsetParent !== null,
+        );
+        if (!focusable.length) return;
+        const [first, last] = [focusable[0], focusable.at(-1)!];
+        const inside = dialog.current.contains(document.activeElement);
+        if (e.shiftKey && (!inside || document.activeElement === first)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (!inside || document.activeElement === last)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {

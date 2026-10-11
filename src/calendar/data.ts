@@ -20,12 +20,15 @@ export function useStdDates(from: string, to: string): ExternalEvent[] {
 
   useEffect(() => {
     let cancelled = false;
+    // The cache read and the fetch race; once the fresh answer is in, the cached one is ignored.
+    let fresh = false;
     const show = (events: ExternalEvent[]) => {
       if (!cancelled) setState({ key, events });
     };
-    void store.cacheGet<ExternalEvent[]>(key).then((cached) => cached && show(cached));
+    void store.cacheGet<ExternalEvent[]>(key).then((cached) => cached && !fresh && show(cached));
     api<{ events: ExternalEvent[] }>(`/std/dates?from=${from}&to=${to}`)
       .then(({ events }) => {
+        fresh = true;
         show(events);
         return store.cachePut(key, events);
       })

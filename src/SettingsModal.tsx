@@ -18,7 +18,18 @@ const PUSH_HINTS: Record<PushState, string> = {
 export function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, logout, updateSettings } = useAuth();
   const navigate = useNavigate();
-  const zones = useMemo(() => Intl.supportedValuesOf("timeZone"), []);
+  // The saved zone is always offered, even when this browser lists it under another name (UTC,
+  // Asia/Kolkata as Asia/Calcutta) or can't list zones at all (Safari before 15.4): a select whose
+  // value isn't an option shows the first one instead.
+  const zones = useMemo(() => {
+    let all: string[] = [];
+    try {
+      all = Intl.supportedValuesOf("timeZone");
+    } catch {
+      // Older browsers: only the saved zone.
+    }
+    return user && !all.includes(user.timezone) ? [user.timezone, ...all] : all;
+  }, [user]);
   const [error, setError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
   const [push, setPush] = useState<PushState | null>(null);
@@ -51,12 +62,23 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   }
 
   async function onLogout() {
+    setError(null);
+    // Deletes still waiting on Undo go through, and one last sync sends what it can.
+    await store.commitRemovals();
+    await store.sync();
     const { pending } = store.getSnapshot();
     const message = `${pending} change${pending === 1 ? " has" : "s have"} not synced yet and will be lost.`;
     if (pending > 0 && !(await confirm("Log out?", message, "Log out"))) return;
     // Otherwise this device keeps receiving the previous account's reminders.
     await disablePush().catch(() => undefined);
-    await logout().catch(() => undefined);
+    try {
+      await logout();
+    } catch {
+      // The session cookie can only be ended by the server: clearing this device while it stays
+      // valid would sign straight back in, with the data gone.
+      setError("Couldn't reach the server to log out. Are you online?");
+      return;
+    }
     await store.clear();
     navigate("/login", { replace: true });
   }
@@ -113,7 +135,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             ))}
           </select>
         </label>
-        {error && <p className="form__error">{error}</p>}
+        {error && <p className="form__error" role="alert">{error}</p>}
         <div className="form__actions">
           <button type="button" onClick={() => void onLogout()}>
             Log out

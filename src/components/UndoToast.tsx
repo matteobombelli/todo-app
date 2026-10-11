@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { Entity } from "../../shared/entities";
 import { store } from "../data/instance";
 
@@ -39,6 +39,17 @@ export function removeWithUndo(entity: Entity, id: string, message: string): voi
 
 /** Renders the undo toast; mounted once, in the shell. */
 export function UndoToast() {
+  // Leaving the app writes pending deletions (startSyncLoop), after which Undo can't bring them
+  // back: the toast goes with them rather than offering an Undo that does nothing.
+  useEffect(() => {
+    const onHide = () => document.visibilityState === "hidden" && set(null);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, []);
   const toast = useSyncExternalStore(
     (l) => {
       listeners.add(l);

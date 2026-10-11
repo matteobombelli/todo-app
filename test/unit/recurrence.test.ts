@@ -63,6 +63,10 @@ describe("parseRRule / serializeRRule", () => {
     expect(serializeRRule(parseRRule("FREQ=WEEKLY;INTERVAL=1;BYDAY=FR,MO"))).toBe("FREQ=WEEKLY;BYDAY=MO,FR");
   });
 
+  it("accepts a trailing semicolon and a date-time UNTIL, keeping its date", () => {
+    expect(serializeRRule(parseRRule("FREQ=DAILY;UNTIL=20261231T235959Z;"))).toBe("FREQ=DAILY;UNTIL=20261231");
+  });
+
   it("rejects what it does not support", () => {
     for (const s of [
       "",
@@ -71,7 +75,8 @@ describe("parseRRule / serializeRRule", () => {
       "FREQ=MONTHLY;BYDAY=MO",
       "FREQ=DAILY;COUNT=3;UNTIL=20261231",
       "FREQ=DAILY;UNTIL=20260231",
-      "FREQ=DAILY;UNTIL=20261231T000000Z",
+      "FREQ=DAILY;UNTIL=2026-12-31",
+      "FREQ=DAILY;UNTIL=00500101",
       "FREQ=DAILY;INTERVAL=0",
       "FREQ=WEEKLY;BYDAY=MO,MO",
       "FREQ=DAILY;BYMONTHDAY=1",
@@ -83,6 +88,20 @@ describe("parseRRule / serializeRRule", () => {
 });
 
 describe("ruleDates", () => {
+  it("jumps ahead to `from` without COUNT, giving the same dates from there", () => {
+    for (const rrule of ["FREQ=DAILY;INTERVAL=3", "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH", "FREQ=WEEKLY"]) {
+      const rule = parseRRule(rrule);
+      const all = ruleDates("1990-01-04", rule, "2026-12-31").filter((d) => d >= "2026-10-01");
+      const fast = ruleDates("1990-01-04", rule, "2026-12-31", "2026-10-01").filter((d) => d >= "2026-10-01");
+      expect(fast, rrule).toEqual(all);
+      expect(ruleDates("1990-01-04", rule, "2026-12-31", "2026-10-01").length, rrule).toBeLessThan(60);
+    }
+  });
+
+  it("weekly before 1970 keeps its start (weekday() was negative there)", () => {
+    expect(ruleDates("1969-12-25", parseRRule("FREQ=WEEKLY;BYDAY=TH"), "1970-01-08")).toEqual(["1969-12-25", "1970-01-01", "1970-01-08"]);
+  });
+
   it("daily with interval and until", () => {
     expect(ruleDates("2026-09-28", parseRRule("FREQ=DAILY;INTERVAL=2;UNTIL=20261004"), "2027-01-01")).toEqual([
       "2026-09-28",
@@ -185,6 +204,20 @@ describe("expandOccurrences", () => {
       ["2026-09-04", "2026-09-05"],
       ["2026-09-05", "2026-09-06"],
     ]);
+  });
+
+  it("moves an occurrence from long before the range into it, without COUNT", () => {
+    const e = event({ rrule: "FREQ=DAILY" });
+    const x = exception({ occurrence_date: "2026-09-02", all_day: false, start_date: "2026-12-10", start_time: "09:00", end_date: "2026-12-10", end_time: "10:00" });
+    expect(expandOccurrences(e, [x], "2026-12-10", "2026-12-10").map((o) => o.occurrence_date)).toEqual(["2026-09-02", "2026-12-10"]);
+  });
+
+  it("stays quick with an exception far in the future", () => {
+    const e = event({ start_date: "1900-01-01", end_date: "1900-01-01", rrule: "FREQ=DAILY" });
+    const far = exception({ occurrence_date: "2199-12-30", title: "Far" });
+    const t = performance.now();
+    for (let i = 0; i < 50; i++) expandOccurrences(e, [far], "2026-10-01", "2026-10-31");
+    expect(performance.now() - t).toBeLessThan(200);
   });
 
   it("drops cancelled occurrences, which still count toward COUNT", () => {

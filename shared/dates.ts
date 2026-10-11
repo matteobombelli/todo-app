@@ -5,9 +5,16 @@ const DAY_MS = 86_400_000;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+// Years outside this range are typos, not plans: Date.UTC reads years 0–99 as 1900s, and a series
+// starting centuries away costs every expansion a walk across them.
+const MIN_YEAR = 1900;
+const MAX_YEAR = 2199;
+
 export function isDate(s: string): boolean {
   const m = DATE_RE.exec(s);
   if (!m) return false;
+  const year = Number(m[1]);
+  if (year < MIN_YEAR || year > MAX_YEAR) return false;
   const month = Number(m[2]);
   return month >= 1 && month <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= daysInMonth(Number(m[1]), month);
 }
@@ -35,12 +42,12 @@ export function daysBetween(from: string, to: string): number {
 
 /** 0 = Monday … 6 = Sunday. */
 export function weekday(date: string): number {
-  return (toDayNumber(date) + 3) % 7;
+  return (((toDayNumber(date) + 3) % 7) + 7) % 7;
 }
 
 /** The Sunday on or before `date`: the calendar's weeks run Sunday to Saturday. */
 export function weekStart(date: string): string {
-  return addDays(date, -((toDayNumber(date) + 4) % 7));
+  return addDays(date, -((((toDayNumber(date) + 4) % 7) + 7) % 7));
 }
 
 export function daysInMonth(year: number, month: number): number {

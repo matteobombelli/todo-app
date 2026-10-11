@@ -42,6 +42,8 @@ export type SyncStatus = "idle" | "syncing" | "offline" | "error";
 export interface Snapshot {
   tables: Tables;
   loaded: boolean;
+  /** The first sync since load() has finished (or failed), so a record missing now is really gone. */
+  settled: boolean;
   status: SyncStatus;
   pending: number;
 }
@@ -65,13 +67,20 @@ export class DataStore {
   private snapshot: Snapshot = {
     tables: { lists: {}, items: {}, events: {}, event_exceptions: {} },
     loaded: false,
+    settled: false,
     status: "idle",
     pending: 0,
   };
+  // This instance's sync cursor. Each tab keeps its own: a cursor shared through IndexedDB let one
+  // tab's pull skip rows another tab still had to receive.
+  private cursor: number | null = null;
+  // Bumped by clear(), so a sync that was in flight drops its results rather than writing a
+  // signed-out user's rows back.
+  private generation = 0;
   private running: Promise<void> | null = null;
   private deferred = new Map<
     string,
-    { rows: { entity: Entity; record: EntityRecord[Entity] }[]; commit: () => void; timer: ReturnType<typeof setTimeout> }
+    { rows: { entity: Entity; record: EntityRecord[Entity] }[]; commit: () => Promise<void>; timer: ReturnType<typeof setTimeout> }
   >();
   private rerun = false;
 
@@ -126,16 +135,19 @@ export class DataStore {
       // Items cached before subtasks, repeats and positions existed lack those fields.
       tables[e] = Object.fromEntries((await db.getAll(e)).map((r) => [r.id, e === "items" ? { parent_id: null, rrule: null, position: null, ...r } : r]));
     }
-    this.set({ tables: tables as Tables, loaded: true, pending: await db.count("outbox") });
+    this.cursor = ((await db.get("meta", "cursor")) as number | undefined) ?? 0;
+    this.set({ tables: tables as Tables, loaded: true, settled: false, pending: await db.count("outbox") });
   }
 
   async clear(): Promise<void> {
+    this.generation++;
+    this.cursor = null;
     for (const { timer } of this.deferred.values()) clearTimeout(timer);
     this.deferred.clear();
     const db = await this.db;
     const tx = db.transaction(STORES, "readwrite");
     await Promise.all([...STORES.map((s) => tx.objectStore(s).clear()), tx.done]);
-    this.set({ tables: { lists: {}, items: {}, events: {}, event_exceptions: {} }, pending: 0 });
+    this.set({ tables: { lists: {}, items: {}, events: {}, event_exceptions: {} }, loaded: false, settled: false, pending: 0 });
   }
 
   get<E extends Entity>(entity: E, id: string): EntityRecord[E] | undefined {
@@ -241,9 +253,9 @@ export class DataStore {
     const commit = () => {
       clearTimeout(timer);
       this.deferred.delete(key);
-      void this.removeRows(entity, id, rows.slice(1).map((r) => ({ entity: r.entity, id: r.record.id })));
+      return this.removeRows(entity, id, rows.slice(1).map((r) => ({ entity: r.entity, id: r.record.id })));
     };
-    const timer = setTimeout(commit, ms);
+    const timer = setTimeout(() => void commit(), ms);
     this.deferred.set(key, { rows, commit, timer });
     this.set({ tables: this.patchTables(rows.map((r) => ({ entity: r.entity, remove: r.record.id }))) });
     return () => {
@@ -261,9 +273,9 @@ export class DataStore {
     };
   }
 
-  /** Deletes every record removeLater is still holding back. */
-  commitRemovals(): void {
-    for (const { commit } of [...this.deferred.values()]) commit();
+  /** Deletes every record removeLater is still holding back; resolves once they're queued. */
+  async commitRemovals(): Promise<void> {
+    await Promise.all([...this.deferred.values()].map(({ commit }) => commit()));
   }
 
   /** Whether a row is hidden by a pending removeLater. */
@@ -282,14 +294,17 @@ export class DataStore {
       do {
         this.rerun = false;
         this.set({ status: "syncing" });
+        const generation = this.generation;
         try {
-          await this.flush();
-          await this.pull();
+          await this.flush(generation);
+          await this.pull(generation);
           this.set({ status: "idle" });
         } catch (err) {
           this.set({ status: err instanceof NetworkError ? "offline" : "error" });
           if (!(err instanceof NetworkError) && !(err instanceof UnauthorizedError)) console.error(err);
           break;
+        } finally {
+          if (this.snapshot.loaded && !this.snapshot.settled) this.set({ settled: true });
         }
       } while (this.rerun);
     })().finally(() => {
@@ -313,9 +328,10 @@ export class DataStore {
     return (await res.json()) as T;
   }
 
-  private async flush(): Promise<void> {
+  private async flush(generation: number): Promise<void> {
     const db = await this.db;
     for (;;) {
+      if (generation !== this.generation) return;
       const tx = db.transaction("outbox");
       const [keys, entries] = await Promise.all([
         tx.store.getAllKeys(undefined, BATCH_SIZE),
@@ -327,6 +343,7 @@ export class DataStore {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mutations: entries satisfies Mutation[] }),
       });
+      if (generation !== this.generation) return;
 
       const entityOf = new Map(entries.map((e) => [e.op_id, e]));
       const changes: { entity: Entity; put?: EntityRecord[Entity]; remove?: string }[] = [];
@@ -336,9 +353,17 @@ export class DataStore {
         if (r.status !== "rejected") continue;
         const entry = entityOf.get(r.op_id)!;
         console.warn(`Sync rejected ${entry.action} on ${entry.entity}: ${r.error}`);
+        // A rejected write may have carried local side effects the server never made (a parent's
+        // move or completion cascaded to its subtasks), so the next pull fetches everything again.
+        this.cursor = 0;
         if (r.current && r.current.deleted_at === null) {
           ops.push(write.objectStore(entry.entity).put(r.current as never));
           changes.push({ entity: entry.entity, put: r.current });
+          // Another record won (the live exception for the same occurrence): this copy goes.
+          if (r.current.id !== entry.record.id) {
+            ops.push(write.objectStore(entry.entity).delete(entry.record.id));
+            changes.push({ entity: entry.entity, remove: entry.record.id });
+          }
         } else {
           ops.push(write.objectStore(entry.entity).delete(entry.record.id));
           changes.push({ entity: entry.entity, remove: entry.record.id });
@@ -349,10 +374,12 @@ export class DataStore {
     }
   }
 
-  private async pull(): Promise<void> {
+  private async pull(generation: number): Promise<void> {
     const db = await this.db;
-    const cursor = ((await db.get("meta", "cursor")) as number | undefined) ?? 0;
-    const data = await this.request<SyncResponse>(`/sync?since=${cursor}`);
+    if (generation !== this.generation) return;
+    this.cursor ??= ((await db.get("meta", "cursor")) as number | undefined) ?? 0;
+    const data = await this.request<SyncResponse>(`/sync?since=${this.cursor}`);
+    if (generation !== this.generation) return;
 
     // The outbox is read inside the write transaction, so a local write cannot slip in between the
     // check and the overwrite.
@@ -375,6 +402,7 @@ export class DataStore {
     }
     ops.push(tx.objectStore("meta").put(data.cursor, "cursor"));
     await Promise.all([...ops, tx.done]);
+    this.cursor = data.cursor;
     if (changes.length) this.set({ tables: this.patchTables(changes) });
   }
 

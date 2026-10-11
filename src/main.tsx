@@ -13,11 +13,14 @@ import ListPage from "./todo/ListPage";
 import ListsPage from "./todo/ListsPage";
 import "./styles.css";
 
-// shared/palette.ts owns the colour values; expose each as a scheme-aware CSS variable.
+// shared/palette.ts owns the colour values; expose each as a scheme-aware CSS variable. A media
+// query rather than light-dark(), which Safari only has from 17.5: before, every colour was blank.
 const paletteStyle = document.createElement("style");
-paletteStyle.textContent = `:root{--std:${STD_COLOR};${Object.entries(PALETTE)
-  .map(([key, { light, dark }]) => `--palette-${key}:light-dark(${light},${dark});`)
-  .join("")}}`;
+const palette = (scheme: "light" | "dark") =>
+  Object.entries(PALETTE)
+    .map(([key, colors]) => `--palette-${key}:${colors[scheme]};`)
+    .join("");
+paletteStyle.textContent = `:root{--std:${STD_COLOR};${palette("light")}}@media (prefers-color-scheme: dark){:root{${palette("dark")}}}`;
 document.head.append(paletteStyle);
 
 const router = createBrowserRouter([

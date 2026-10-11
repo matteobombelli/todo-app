@@ -1,5 +1,5 @@
 import { CalendarPlus, Check, ChevronRight, Ellipsis, Info, Repeat, Trash2 } from "lucide-react";
-import { useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import type { Item, List } from "../../shared/entities";
 import { completeItem, isOverdue, type Now } from "../../shared/items";
 import { Checkbox } from "../components/Checkbox";
@@ -80,13 +80,23 @@ export function ItemRow({
     haptic();
     if (done || !collapseOnDone) return toggleItem(item);
     setLeaving(true);
+  }
+
+  // Timed once the row has its leaving classes, so the fold's delay is part of the wait (measured
+  // before, the item completed and the row jumped away mid-fold). Not cancelled on unmount: the
+  // check-off still lands if the page changes meanwhile.
+  useEffect(() => {
+    if (!leaving) return;
     setTimeout(() => {
       // The record may have changed (a sync pull) while the row folded away.
       const current = store.get("items", item.id);
       if (current) toggleItem(current);
       setLeaving(false);
     }, wrapper.current ? transitionMs(wrapper.current) : 0);
-  }
+  }, [leaving, item.id]);
+
+  // While editing, the field's save, so Details opens with the title just typed.
+  const saveTitle = useRef<(() => Item) | null>(null);
 
   useRowSwipe(swiper, swipe && !edit ? { right: onToggle, left: () => deleteItem(item) } : null);
 
@@ -150,7 +160,7 @@ export function ItemRow({
             label={done ? `Mark "${item.title}" not done` : `Mark "${item.title}" done`}
           />
           {edit ? (
-            <TitleField item={item} edit={edit} />
+            <TitleField item={item} edit={edit} saveRef={saveTitle} />
           ) : onTap ? (
             <button type="button" className="item__body" onClick={() => onTap(item)}>
               {body}
@@ -160,7 +170,14 @@ export function ItemRow({
           )}
           {dateButton}
           {edit && (
-            <IconButton icon={Info} label="Details" className="row__kebab item__info" ariaHasPopup="dialog" onMouseDown={keepFocus} onClick={() => edit.onDetails(item)} />
+            <IconButton
+              icon={Info}
+              label="Details"
+              className="row__kebab item__info"
+              ariaHasPopup="dialog"
+              onMouseDown={keepFocus}
+              onClick={() => edit.onDetails(saveTitle.current?.() ?? item)}
+            />
           )}
           {fold && !edit && (
             <button
@@ -190,7 +207,15 @@ export function ItemRow({
 }
 
 /** The title being edited in place (see ItemRow's `edit`). Saves once, however the edit ends. */
-function TitleField({ item, edit }: { item: Item; edit: NonNullable<Parameters<typeof ItemRow>[0]["edit"]> }) {
+function TitleField({
+  item,
+  edit,
+  saveRef,
+}: {
+  item: Item;
+  edit: NonNullable<Parameters<typeof ItemRow>[0]["edit"]>;
+  saveRef: RefObject<(() => Item) | null>;
+}) {
   const [title, setTitle] = useState(item.title);
   const ended = useRef(false);
 
@@ -206,6 +231,19 @@ function TitleField({ item, edit }: { item: Item; edit: NonNullable<Parameters<t
     then();
   }
 
+  // Tapping Details keeps focus here (so the edit doesn't end first) and then unmounts this field,
+  // which fires no blur: it saves through this instead, and hands over the item as saved.
+  useEffect(() => {
+    saveRef.current = () => {
+      const trimmed = title.trim();
+      end(true, () => undefined);
+      return trimmed ? { ...item, title: trimmed } : item;
+    };
+    return () => {
+      saveRef.current = null;
+    };
+  });
+
   return (
     <input
       autoFocus
@@ -217,11 +255,13 @@ function TitleField({ item, edit }: { item: Item; edit: NonNullable<Parameters<t
       onChange={(e) => setTitle(e.target.value)}
       onBlur={() => end(true, edit.onDone)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+        // Safari ends an IME composition with an Enter that isn't flagged isComposing (keyCode 229).
+        const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+        if (e.key === "Enter" && !composing) {
           e.preventDefault();
           // An emptied title deletes the item, so there is nothing to add below.
           end(true, title.trim() ? () => edit.onReturn(item) : edit.onDone);
-        } else if (e.key === "Escape") {
+        } else if (e.key === "Escape" && !composing) {
           e.stopPropagation();
           end(false, edit.onDone);
         }

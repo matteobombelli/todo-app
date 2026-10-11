@@ -53,6 +53,12 @@ export function ItemDraft({
         onChange={(e) => setTitle(e.target.value)}
         onBlur={onBlur}
         onKeyDown={(e) => {
+          // The Enter or Escape that ends an IME composition is the input method's, not the row's
+          // (Safari doesn't flag it isComposing: keyCode 229).
+          if (e.nativeEvent.isComposing || e.keyCode === 229) {
+            if (e.key === "Enter") e.preventDefault();
+            return;
+          }
           if (e.key !== "Escape") return;
           e.stopPropagation();
           cancelled.current = true;

@@ -3,7 +3,7 @@ import { useId, useMemo, useState, type FormEvent, type MouseEvent } from "react
 import type { Item } from "../../shared/entities";
 import { newId } from "../../shared/ids";
 import { Modal, useModal } from "../components/Modal";
-import { RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
+import { followStart, RepeatFields, repeatFromRRule, repeatProblem, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
 import { localNow, useData, useLists } from "../data/hooks";
 import { store } from "../data/instance";
 import { deleteItem } from "./itemMenu";
@@ -33,6 +33,9 @@ export function ItemEditor({
   const [listId, setListId] = useState(item?.list_id ?? initial?.list_id ?? lists[0]?.id ?? "");
   const [modal, close] = useModal(onClose);
   const fieldId = useId();
+  const [error, setError] = useState<string | null>(null);
+  // The form as it opened, so saving writes only what the user changed (see save).
+  const [opened] = useState(() => ({ title, notes, dueDate, dueTime, rrule: item?.rrule ? repeatToRRule(repeat) : null, listId }));
 
   const subtaskCount = useMemo(() => Object.values(items).filter((i) => i.parent_id === id).length, [items, id]);
   const parentId = item?.parent_id ?? null;
@@ -45,25 +48,40 @@ export function ItemEditor({
     const current = store.get("items", id);
     if (item && !current) return; // Deleted meanwhile.
     const trimmed = title.trim();
-    if (!trimmed && !current) return;
-    const next = {
-      id,
-      completed_at: null,
-      position: null,
-      ...current,
-      title: trimmed || current!.title,
-      notes,
-      due_date: dueDate || null,
-      due_time: dueDate && dueTime ? dueTime : null,
-      rrule: canRepeat ? repeatToRRule(repeat) : null,
-      list_id: listId,
+    const rrule = canRepeat ? repeatToRRule(repeat) : null;
+    if (!current) {
+      if (trimmed && listId) {
+        void store.upsert("items", {
+          id,
+          completed_at: null,
+          position: null,
+          parent_id: null,
+          title: trimmed,
+          notes,
+          due_date: dueDate || null,
+          due_time: dueDate && dueTime ? dueTime : null,
+          rrule,
+          list_id: listId,
+        });
+      }
+      return;
+    }
+    // Only what the user changed goes onto the record as it is now: writing the whole form would
+    // put back values changed elsewhere meanwhile (Claude rescheduling it, say).
+    const patch: Partial<Item> = {};
+    if (trimmed && trimmed !== opened.title) patch.title = trimmed;
+    if (notes !== opened.notes) patch.notes = notes;
+    if (dueDate !== opened.dueDate || dueTime !== opened.dueTime) {
+      patch.due_date = dueDate || null;
+      patch.due_time = dueDate && dueTime ? dueTime : null;
+    }
+    if (rrule !== opened.rrule) patch.rrule = rrule;
+    if (listId && listId !== opened.listId) {
+      patch.list_id = listId;
       // A subtask moved to another list on its own leaves its parent behind.
-      parent_id: current && listId === current.list_id ? current.parent_id : null,
-    };
-    const changed =
-      !current ||
-      (["title", "notes", "due_date", "due_time", "rrule", "list_id", "parent_id"] as const).some((k) => next[k] !== current[k]);
-    if (changed && listId) void store.upsert("items", next);
+      if (listId !== current.list_id) patch.parent_id = null;
+    }
+    if (Object.keys(patch).length) void store.upsert("items", { ...current, ...patch });
   }
 
   // A clear button goes once its field is empty: from the keyboard (no pointer, so no click
@@ -74,6 +92,9 @@ export function ItemEditor({
   }
 
   function done() {
+    const problem = canRepeat ? repeatProblem(repeat, dueDate) : null;
+    setError(problem);
+    if (problem) return;
     save();
     close();
   }
@@ -107,7 +128,15 @@ export function ItemEditor({
               Due date
             </label>
             <div className="field__control">
-              <input id={`${fieldId}-date`} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <input
+                id={`${fieldId}-date`}
+                type="date"
+                value={dueDate}
+                onChange={(e) => {
+                  setRepeat((r) => followStart(r, dueDate, e.target.value));
+                  setDueDate(e.target.value);
+                }}
+              />
               {dueDate && (
                 <button
                   type="button"
@@ -148,6 +177,15 @@ export function ItemEditor({
         </div>
         {canRepeat && (
           <RepeatFields repeat={repeat} startDate={dueDate} onChange={(patch: Partial<RepeatForm>) => setRepeat((r) => ({ ...r, ...patch }))} />
+        )}
+        {error && (
+          <div className="form__error" role="alert">
+            <p>{error}</p>
+            {/* Closing keeps trying to save; this is the way out without fixing the form. */}
+            <button type="button" className="button--plain" onClick={close}>
+              Discard changes
+            </button>
+          </div>
         )}
         <label className="field">
           <span className="field__label">List</span>

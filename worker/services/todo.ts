@@ -171,7 +171,14 @@ export async function userNow(s: Scope): Promise<Now & { timezone: string }> {
 
 function matchList(lists: List[], ref: string): List {
   const needle = ref.trim().toLowerCase();
-  const match = lists.find((l) => l.id === ref) ?? lists.find((l) => l.name.toLowerCase() === needle);
+  const byId = lists.find((l) => l.id === ref);
+  if (byId) return byId;
+  const named = lists.filter((l) => l.name.toLowerCase() === needle);
+  // Picking one of two same-named lists would change (or delete) whichever the database lists first.
+  if (named.length > 1) {
+    throw new ToolError(`Several lists are named "${ref}": ${named.map((l) => l.id).join(", ")}. Pass the id instead.`);
+  }
+  const match = named[0];
   if (!match) {
     const names = lists.map((l) => `"${l.name}"`).join(", ") || "none";
     throw new ToolError(`No list named or with id "${ref}". Lists: ${names}`);
@@ -526,16 +533,27 @@ export async function updateEvents(s: Scope, patches: EventPatch[]): Promise<(Ca
 
     if (scopeOf(patch) === "series" || !event.rrule) {
       const schedule = scheduleTouched ? completeSchedule(patch, event) : null;
+      const moved = schedule ? daysBetween(event.start_date, schedule.start_date) : 0;
       const fields = check(EventFields, {
         ...event,
         title: patch.title ?? event.title,
         notes: patch.notes ?? event.notes,
         color: patch.color ?? event.color,
         // Moving the series start turns its weekdays with it, unless a new rule is given.
-        rrule: patch.rrule !== undefined ? patch.rrule : shiftRRule(event.rrule, schedule ? daysBetween(event.start_date, schedule.start_date) : 0),
+        rrule: patch.rrule !== undefined ? patch.rrule : shiftRRule(event.rrule, moved),
         ...schedule,
       });
-      return b.upsert("events", fields);
+      const updated = b.upsert("events", fields);
+      // Exceptions are keyed by the date the rule generated, which moved with the series. Furthest
+      // along first, so no move lands on a date another hasn't left yet.
+      if (moved && event.rrule && patch.rrule === undefined) {
+        const exceptions = b
+          .all("event_exceptions")
+          .filter((x) => x.event_id === event.id)
+          .sort((x, y) => (moved > 0 ? y.occurrence_date.localeCompare(x.occurrence_date) : x.occurrence_date.localeCompare(y.occurrence_date)));
+        for (const x of exceptions) b.upsert("event_exceptions", { ...x, occurrence_date: addDays(x.occurrence_date, moved) });
+      }
+      return updated;
     }
 
     if (!occurrenceDate) throw new ToolError("occurrence_date is required with scope \"occurrence\"");

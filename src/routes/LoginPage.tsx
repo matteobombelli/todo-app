@@ -56,7 +56,7 @@ export default function LoginPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        {error && <p className="form__error">{error}</p>}
+        {error && <p className="form__error" role="alert">{error}</p>}
         <button type="submit" className="button--primary button--icon" disabled={busy}>
           {busy && <Spinner inline />}
           Log in

@@ -178,7 +178,12 @@ function longPressDrag(
   };
   const move = (e: PointerEvent) => {
     if (hold && e.pointerId === hold.id && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > SLOP) cancelHold();
-    if (drag && e.pointerId === drag.id) on.move(drag, e);
+    if (drag && e.pointerId === drag.id) {
+      // A lifted row's moves are the drag's alone: the page's edge back-swipe would otherwise take
+      // the pointer from the list, which then never hears the pointerup.
+      e.stopPropagation();
+      on.move(drag, e);
+    }
   };
   const up = (e: PointerEvent) => {
     if (hold && e.pointerId === hold.id) cancelHold();
@@ -212,6 +217,11 @@ function longPressDrag(
   list.addEventListener("pointermove", move);
   list.addEventListener("pointerup", up);
   list.addEventListener("pointercancel", up);
+  // Losing the pointer some other way ends the drag as a cancel, rather than leaving the row lifted.
+  const lost = (e: PointerEvent) => {
+    if (drag && e.pointerId === drag.id) up(new PointerEvent("pointercancel", e));
+  };
+  list.addEventListener("lostpointercapture", lost);
   list.addEventListener("click", click, true);
   list.addEventListener("keydown", key, true);
   list.addEventListener("contextmenu", block);
@@ -223,6 +233,7 @@ function longPressDrag(
     list.removeEventListener("pointermove", move);
     list.removeEventListener("pointerup", up);
     list.removeEventListener("pointercancel", up);
+    list.removeEventListener("lostpointercapture", lost);
     list.removeEventListener("click", click, true);
     list.removeEventListener("keydown", key, true);
     list.removeEventListener("contextmenu", block);
@@ -333,7 +344,8 @@ export function useDropOnto(
         .find((el): el is HTMLLIElement => !!el && el !== li && el.parentElement === list && !!el.dataset.id) ?? null;
     // Where the lifted row would land: onto a row (side null), beside one, or nowhere.
     const aim = (li: HTMLElement, e: PointerEvent): { row: HTMLElement; side: DropSide | null } | null => {
-      const row = rowUnder(li, e);
+      // Rows without a record (the new-item row) lift like any other but drop nowhere.
+      const row = li.dataset.id ? rowUnder(li, e) : null;
       if (!row) return null;
       const { accepts, reorder } = callbacks.current;
       const [dragged, target] = [li.dataset.id!, row.dataset.id!];
@@ -365,8 +377,8 @@ export function useDropOnto(
         li.classList.remove("drag--floating");
         // Snaps back; a change lands when the list re-renders (useSettleOnOrder).
         li.style.transform = "";
-        if (e.type !== "pointerup") return;
-        const dragged = li.dataset.id!;
+        if (e.type !== "pointerup" || !li.dataset.id) return;
+        const dragged = li.dataset.id;
         const target = aim(li, e);
         if (target?.side) callbacks.current.reorder?.onReorder(dragged, target.row.dataset.id!, target.side);
         else if (target) callbacks.current.onDrop(dragged, target.row.dataset.id!);

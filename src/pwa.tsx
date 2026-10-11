@@ -22,6 +22,13 @@ export function UpdateToast() {
       window.location.reload();
     };
     container.addEventListener("controllerchange", onControllerChange);
+    // A tapped reminder, for a window the worker couldn't navigate itself (push-sw.js).
+    const onMessage = (e: MessageEvent<{ type?: string; url?: string }>) => {
+      if (e.data?.type !== "navigate" || !e.data.url) return;
+      const url = new URL(e.data.url, window.location.href);
+      if (url.origin === window.location.origin) window.location.assign(url.href);
+    };
+    container.addEventListener("message", onMessage);
 
     let registration: ServiceWorkerRegistration | undefined;
     const watch = (sw: ServiceWorker) => {
@@ -32,6 +39,8 @@ export function UpdateToast() {
       });
     };
     void container.register("/sw.js", { scope: "/", updateViaCache: "none" }).then((reg) => {
+      // Some contexts (automation that blocks workers) resolve without a registration.
+      if (!reg) return;
       registration = reg;
       // A version left waiting from an earlier visit: the app has only just opened, so take it now.
       if (reg.waiting && container.controller) reg.waiting.postMessage({ type: "SKIP_WAITING" });
@@ -39,7 +48,7 @@ export function UpdateToast() {
       reg.addEventListener("updatefound", () => {
         if (reg.installing) watch(reg.installing);
       });
-    });
+    }, () => undefined);
 
     // An installed app can stay open for days; look for a deploy whenever it comes back.
     const onVisible = () => {
@@ -48,6 +57,7 @@ export function UpdateToast() {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       container.removeEventListener("controllerchange", onControllerChange);
+      container.removeEventListener("message", onMessage);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);

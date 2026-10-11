@@ -34,13 +34,13 @@ export function ListEditor({
     const trimmed = name.trim();
     const current = list && store.get("lists", list.id);
     if (list && !current) return close();
-    if ((trimmed || current) && (!current || trimmed !== current.name || color !== current.color)) {
-      void store.upsert("lists", {
-        id: current?.id ?? newId(),
-        name: trimmed || current!.name,
-        color,
-        sort_order: current?.sort_order ?? nextSortOrder,
-      });
+    if (!current) {
+      if (trimmed) void store.upsert("lists", { id: newId(), name: trimmed, color, sort_order: nextSortOrder });
+    } else {
+      // Only what changed here, over the list as it is now (a rename elsewhere stays otherwise).
+      const name = trimmed && trimmed !== list!.name ? trimmed : current.name;
+      const newColor = color !== list!.color ? color : current.color;
+      if (name !== current.name || newColor !== current.color) void store.upsert("lists", { ...current, name, color: newColor });
     }
     close();
   }

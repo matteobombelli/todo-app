@@ -14,10 +14,17 @@ interface UserRow {
   password_hash: string;
 }
 
+/** Compares secrets in constant time (as digests, so their lengths don't show either). */
+async function sameSecret(a: string, b: string): Promise<boolean> {
+  const digest = async (s: string) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  const [x, y] = await Promise.all([digest(a), digest(b)]);
+  return crypto.subtle.timingSafeEqual(x, y);
+}
+
 export function registerAuthRoutes(r: Router): void {
   r.post("/auth/register", async (c) => {
     const body = await parseJson(c.req, RegisterBody);
-    if (body.inviteCode !== c.env.REGISTRATION_SECRET) throw new HttpError(403, "Invalid invite code");
+    if (!(await sameSecret(body.inviteCode, c.env.REGISTRATION_SECRET))) throw new HttpError(403, "Invalid invite code");
     const existing = await c.env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(body.email).first();
     if (existing) throw new HttpError(409, "Email already registered");
     const user: User = {

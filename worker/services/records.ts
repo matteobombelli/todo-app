@@ -154,8 +154,8 @@ export type BatchOutcome =
   | { applied: true; results: MutationResult[] }
   | { applied: false; rejected: { index: number; result: MutationResult }[] };
 
-export async function applyMutation(db: D1Database, userId: string, m: Mutation): Promise<MutationResult> {
-  const outcome = await applyMutations(db, userId, [m]);
+export async function applyMutation(db: D1Database, userId: string, m: Mutation, now?: number): Promise<MutationResult> {
+  const outcome = await applyMutations(db, userId, [m], now);
   return outcome.applied ? outcome.results[0] : outcome.rejected[0].result;
 }
 
@@ -164,9 +164,8 @@ export async function applyMutation(db: D1Database, userId: string, m: Mutation)
  * earlier ones (an item in a list created by the same batch). The whole batch is one D1 batch with a
  * single user_seq bump, so its rows share one seq.
  */
-export async function applyMutations(db: D1Database, userId: string, mutations: Mutation[]): Promise<BatchOutcome> {
+export async function applyMutations(db: D1Database, userId: string, mutations: Mutation[], now = Date.now()): Promise<BatchOutcome> {
   const { done, rows } = await loadBatch(db, mutations);
-  const now = Date.now();
   const seq = "(SELECT value FROM user_seq WHERE user_id = ?)";
   const statements: D1PreparedStatement[] = [];
   const rejected: { index: number; result: MutationResult }[] = [];
@@ -240,7 +239,9 @@ export async function applyMutations(db: D1Database, userId: string, mutations: 
     }
 
     const columns = COLUMNS[m.entity];
-    const createdAt = (existing?.created_at as number) ?? now;
+    // Records created together keep the order they were sent in: items with no position sort by
+    // created_at, and a shared timestamp left them to their random ids.
+    const createdAt = (existing?.created_at as number) ?? now + index;
     writes = true;
     statements.push(
       db
@@ -290,24 +291,35 @@ export async function applyMutations(db: D1Database, userId: string, mutations: 
       results: mutations.map((m, i) => alreadyApplied.get(i) ?? { op_id: m.op_id, status: "applied", seq: value }),
     };
   } catch (err) {
-    // event_exceptions: another exception already covers an occurrence. D1 doesn't say which
-    // statement failed, so every exception the batch writes is named.
-    if (!(err instanceof Error && err.message.includes("UNIQUE"))) throw err;
+    // event_exceptions: another live exception already covers an occurrence. D1 doesn't say which
+    // statement failed, so every exception the batch writes is named, each answered with the live
+    // exception for its occurrence (or its own row), which the client keeps instead of its copy.
+    if (!(err instanceof Error && err.message.includes("UNIQUE") && err.message.includes("event_exceptions"))) throw err;
     const suspects = mutations.flatMap((m, index) =>
       m.entity === "event_exceptions" && m.action === "upsert" && !alreadyApplied.has(index) ? [{ m, index }] : [],
     );
     if (!suspects.length) throw err;
+    const live = await db.batch(
+      suspects.map(({ m }) =>
+        db
+          .prepare("SELECT * FROM event_exceptions WHERE user_id = ? AND event_id = ? AND occurrence_date = ? AND deleted_at IS NULL")
+          .bind(userId, m.record.event_id ?? null, m.record.occurrence_date ?? null),
+      ),
+    );
     return {
       applied: false,
-      rejected: suspects.map(({ m, index }) => ({
-        index,
-        result: {
-          op_id: m.op_id,
-          status: "rejected",
-          error: "Conflicts with an existing record",
-          current: before.get(index) ?? null,
-        },
-      })),
+      rejected: suspects.map(({ m, index }, i) => {
+        const row = live[i].results[0] as Row | undefined;
+        return {
+          index,
+          result: {
+            op_id: m.op_id,
+            status: "rejected",
+            error: "Conflicts with an existing record",
+            current: row ? toRecord(row) : (before.get(index) ?? null),
+          },
+        };
+      }),
     };
   }
 }

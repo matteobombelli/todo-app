@@ -78,12 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setUser],
   );
 
+  // Signed out only once the server has ended the session; a 401 means it already had.
   const logout = useCallback(async () => {
     try {
       await api("/auth/logout", { method: "POST" });
-    } finally {
-      setUser(null);
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 401)) throw err;
     }
+    setUser(null);
   }, [setUser]);
 
   const updateSettings = useCallback(

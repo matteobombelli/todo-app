@@ -23,6 +23,8 @@ export class StdNotConnectedError extends Error {}
 
 const BASE = "https://save-the-date";
 
+const STD_TIMEOUT_MS = 5000;
+
 /** Dated save-the-date entries overlapping [from, to], mapped to ExternalEvent. */
 export async function fetchStdDates(env: Env, userId: string, from: string, to: string): Promise<ExternalEvent[]> {
   const url = new URL(`${BASE}/api/dates`);
@@ -31,13 +33,23 @@ export async function fetchStdDates(env: Env, userId: string, from: string, to: 
   url.searchParams.set("order", "asc");
   let res: Response;
   try {
-    res = await env.STD.fetch(url, { headers: { Authorization: `Bearer ${env.STD_TOKEN}`, "X-Todo-User": userId } });
+    // A hung save-the-date mustn't hang the calendar or Claude's agenda with it.
+    res = await env.STD.fetch(url, {
+      headers: { Authorization: `Bearer ${env.STD_TOKEN}`, "X-Todo-User": userId },
+      signal: AbortSignal.timeout(STD_TIMEOUT_MS),
+    });
   } catch (err) {
     throw new StdUnavailableError(String(err));
   }
   if (res.status === 403) throw new StdNotConnectedError();
   if (!res.ok) throw new StdUnavailableError(`save-the-date answered ${res.status}`);
-  const rows = (await res.json()) as StdRow[];
+  let rows: StdRow[];
+  try {
+    rows = (await res.json()) as StdRow[];
+  } catch (err) {
+    throw new StdUnavailableError(`save-the-date sent a bad body: ${String(err)}`);
+  }
+  if (!Array.isArray(rows)) throw new StdUnavailableError("save-the-date sent a bad body");
   return rows
     .filter((r): r is StdRow & { event_date: string } => r.event_date !== null)
     .map((r) => ({

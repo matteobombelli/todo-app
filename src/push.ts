@@ -7,9 +7,17 @@ export type PushState = "unsupported" | "denied" | "off" | "on";
 // only to an app added to the Home Screen.
 const supported = () => import.meta.env.PROD && "serviceWorker" in navigator && "PushManager" in window;
 
+// Not `navigator.serviceWorker.ready`, which never settles when no worker registered (registration
+// failed, or storage is blocked): that hung Settings and logging out.
+async function registration(): Promise<ServiceWorkerRegistration | null> {
+  const found = await navigator.serviceWorker.getRegistration();
+  if (!found) return null;
+  // Registered but still installing: ready settles once it activates.
+  return found.active ? found : navigator.serviceWorker.ready;
+}
+
 async function currentSubscription(): Promise<PushSubscription | null> {
-  const registration = await navigator.serviceWorker.ready;
-  return registration.pushManager.getSubscription();
+  return (await registration())?.pushManager.getSubscription() ?? null;
 }
 
 function save(subscription: PushSubscription): Promise<void> {
@@ -17,7 +25,7 @@ function save(subscription: PushSubscription): Promise<void> {
 }
 
 export async function pushState(): Promise<PushState> {
-  if (!supported()) return "unsupported";
+  if (!supported() || !(await navigator.serviceWorker.getRegistration())) return "unsupported";
   if (Notification.permission === "denied") return "denied";
   if (Notification.permission !== "granted") return "off";
   return (await currentSubscription()) ? "on" : "off";
@@ -26,9 +34,10 @@ export async function pushState(): Promise<PushState> {
 /** Must run from a tap: iOS only shows the permission prompt for a user gesture. */
 export async function enablePush(): Promise<PushState> {
   if ((await Notification.requestPermission()) !== "granted") return pushState();
+  const reg = await registration();
+  if (!reg) return "unsupported";
   const { key } = await api<{ key: string }>("/push/key");
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  const subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
   await save(subscription);
   return "on";
 }

@@ -47,7 +47,8 @@
     --fill: rgba(118, 118, 128, 0.24);
     --material: rgba(30, 30, 32, 0.78);
     --scrim: rgba(0, 0, 0, 0.5);
-    --on-color: #ffffff;
+    /* The dark palette is light enough that white on it was unreadable (yellow at 1.7:1). */
+    --on-color: #141416;
 
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
@@ -1145,7 +1146,8 @@ button.item__body {
   display: none;
   align-items: center;
   padding: 0 1.25rem;
-  color: var(--on-color);
+  /* White on the system green and red, as iOS does, in both schemes. */
+  color: #ffffff;
 }
 
 .swipe[data-swipe="right"] .swipe__action--right {
@@ -1428,6 +1430,19 @@ button.item__body {
 .form__error {
   color: var(--danger);
   font-size: 0.875rem;
+  margin: 0;
+}
+
+/* An editor's error with its way out ("Discard changes"). */
+div.form__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+}
+
+div.form__error p {
   margin: 0;
 }
 

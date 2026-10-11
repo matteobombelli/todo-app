@@ -25,6 +25,17 @@ const RRule = z
   }, "Unsupported RRULE")
   .transform((s) => serializeRRule(parseRRule(s)));
 
+/** Whether a repeat rule ends before its first date, leaving it with no occurrences at all. */
+function endsBefore(rrule: string | null, start: string | null): boolean {
+  if (rrule === null || start === null) return false;
+  try {
+    const until = parseRRule(rrule).until;
+    return until !== null && until < start;
+  } catch {
+    return false; // An unparseable rule is reported by its own field.
+  }
+}
+
 export const ListFields = z.object({
   id: Id,
   name: z.string().trim().min(1).max(120),
@@ -51,7 +62,8 @@ export const ItemFields = z
   })
   .refine((i) => i.due_time === null || i.due_date !== null, { message: "due_time needs due_date", path: ["due_time"] })
   .refine((i) => i.rrule === null || i.due_date !== null, { message: "A repeating item needs a due date", path: ["rrule"] })
-  .refine((i) => i.rrule === null || i.parent_id === null, { message: "A subtask can't repeat", path: ["rrule"] });
+  .refine((i) => i.rrule === null || i.parent_id === null, { message: "A subtask can't repeat", path: ["rrule"] })
+  .refine((i) => !endsBefore(i.rrule, i.due_date), { message: "The repeat ends before the due date", path: ["rrule"] });
 
 const eventTimesValid = (e: {
   all_day: boolean;
@@ -81,7 +93,8 @@ export const EventFields = z
   })
   .refine(eventTimesValid, {
     message: "All-day events have no times; timed events need both, and the end cannot precede the start",
-  });
+  })
+  .refine((e) => !endsBefore(e.rrule, e.start_date), { message: "The repeat ends before the event starts", path: ["rrule"] });
 
 // Override columns are all-or-nothing for the schedule: either every schedule field is null (keep
 // the series' schedule) or they describe a full valid schedule.

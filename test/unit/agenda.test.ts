@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAgenda, type ExternalEvent } from "../../shared/agenda";
 import type { Item } from "../../shared/entities";
-import { cascadeToSubtasks, isOverdue, orderItems, positionAfter, reorderPosition } from "../../shared/items";
+import { cascadeToSubtasks, isOverdue, orderItems, placeAfter, positionAfter, reorderPositions } from "../../shared/items";
 import type { Occurrence } from "../../shared/recurrence";
 
 let n = 0;
@@ -166,13 +166,16 @@ describe("positionAfter", () => {
   });
 });
 
-describe("reorderPosition", () => {
+describe("reorderPositions", () => {
   // Moves `id` to `gap` and returns the new display order, or null when the move is refused.
+  function apply(items: Item[], positions: Map<string, number>): Item[] {
+    return items.map((i) => (positions.has(i.id) ? { ...i, position: positions.get(i.id)! } : i));
+  }
   function move(items: Item[], id: string, gap: number): string[] | null {
     const { open } = orderItems(items);
-    const position = reorderPosition(open, id, gap);
-    if (position === null) return null;
-    return orderItems(items.map((i) => (i.id === id ? { ...i, position } : i))).open.map(({ item }) => item.id);
+    const positions = reorderPositions(open, id, gap);
+    if (positions === null) return null;
+    return orderItems(apply(items, positions)).open.map(({ item }) => item.id);
   }
 
   it("moves an undated item to the top, between two others and to the bottom", () => {
@@ -225,12 +228,52 @@ describe("reorderPosition", () => {
     expect(move(all, s1.id, 5)).toBeNull();
   });
 
+  it("keeps working after many moves into the same gap, respacing when ranks run out of room", () => {
+    const now = 1_760_000_000_000;
+    let items = [item({ created_at: now }), item({ created_at: now + 1000 }), item({ created_at: now + 2000 }), item({ created_at: now + 3000 })];
+    const [a, , , d] = items;
+    // Alternately drop the last two items right after the first, 80 times.
+    for (let n = 0; n < 80; n++) {
+      const { open } = orderItems(items);
+      const last = open.at(-1)!.item.id;
+      const positions = reorderPositions(open, last, 1);
+      expect(positions, `move ${n}`).not.toBeNull();
+      items = apply(items, positions!);
+      expect(orderItems(items).open[1].item.id, `move ${n}`).toBe(last);
+    }
+    expect(orderItems(items).open[0].item.id).toBe(a.id);
+    void d;
+  });
+
+  it("separates items that share a rank (created in one batch) when one moves between them", () => {
+    const [a, b, c] = [item({ created_at: 500 }), item({ created_at: 500 }), item({ created_at: 500 })];
+    const order = orderItems([a, b, c]).open.map((o) => o.item.id);
+    const moved = move([a, b, c], order[2], 1);
+    expect(moved).toEqual([order[0], order[2], order[1]]);
+  });
+
   it("orders placed items against unplaced ones by created_at", () => {
     const a = item({ created_at: 1000 });
     const b = item({ created_at: 2000, position: 500 });
     const c = item({ created_at: 3000 });
     // Order: b (500), a (1000), c (3000).
     expect(move([a, b, c], c.id, 1)).toEqual([b.id, c.id, a.id]);
+  });
+});
+
+describe("placeAfter", () => {
+  it("adds below the same anchor 60 times in a row, each landing right below it", () => {
+    const now = 1_760_000_000_000;
+    const anchor = item({ created_at: now });
+    let items = [anchor, item({ created_at: now + 1000 })];
+    const undated = { due_date: null, due_time: null };
+    for (let n = 0; n < 60; n++) {
+      const { position, respaced } = placeAfter(anchor, undated, items);
+      items = items.map((i) => (respaced.has(i.id) ? { ...i, position: respaced.get(i.id)! } : i));
+      const added = item({ created_at: now + 5000 + n, position });
+      items.push(added);
+      expect(orderItems(items).open.map((o) => o.item.id).slice(0, 2), `insert ${n}`).toEqual([anchor.id, added.id]);
+    }
   });
 });
 

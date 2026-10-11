@@ -61,7 +61,7 @@ export default function RegisterPage() {
           value={inviteCode}
           onChange={(e) => setInviteCode(e.target.value)}
         />
-        {error && <p className="form__error">{error}</p>}
+        {error && <p className="form__error" role="alert">{error}</p>}
         <button type="submit" className="button--primary button--icon" disabled={busy}>
           {busy && <Spinner inline />}
           Register

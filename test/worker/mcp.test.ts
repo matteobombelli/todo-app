@@ -129,7 +129,10 @@ describe("OAuth", () => {
 
     const consent = await fetchApp(path, { headers: { Cookie: cookie } });
     expect(consent.status).toBe(200);
-    expect(await consent.text()).toContain("Allow Claude?");
+    const html = await consent.text();
+    expect(html).toContain("Allow Claude?");
+    // Any client can call itself Claude, so the page says where access goes.
+    expect(html).toContain("<strong>claude.ai</strong>");
   });
 
   it("denies, and refuses a cross-origin approval", async () => {
@@ -397,13 +400,30 @@ describe("MCP bulk writes", () => {
     expect(result.data[1].completed_at).toEqual(expect.any(Number));
   });
 
+  it("keeps items created together in the order they were sent", async () => {
+    const titles = Array.from({ length: 8 }, (_, i) => `Batch ${i}`);
+    await call(token, "create_item", { items: titles.map((title) => ({ list: "Errands", title })) });
+    const listed = (await call(token, "list_items", { list: "Errands" })).data.map((i: { title: string }) => i.title);
+    expect(listed.filter((t: string) => t.startsWith("Batch "))).toEqual(titles);
+  });
+
+  it("refuses a list name that matches several lists, naming their ids", async () => {
+    const a = (await call(token, "create_list", { name: "Twins" })).data;
+    const b = (await call(token, "create_list", { name: "twins" })).data;
+    const res = await call(token, "delete_list", { list: "Twins" });
+    expect(res.isError).toBe(true);
+    expect(res.data).toContain(a.id);
+    expect(res.data).toContain(b.id);
+    expect((await call(token, "delete_list", { list: a.id })).isError).toBeFalsy();
+  });
+
   it("moves a repeating item to its next date instead of completing it", async () => {
-    const created = (await call(token, "create_item", { list: "Chores", title: "Mop", due_date: "2999-01-01", rrule: "FREQ=DAILY;COUNT=2" })).data;
-    expect(created).toMatchObject({ due_date: "2999-01-01", rrule: "FREQ=DAILY;COUNT=2" });
+    const created = (await call(token, "create_item", { list: "Chores", title: "Mop", due_date: "2190-01-01", rrule: "FREQ=DAILY;COUNT=2" })).data;
+    expect(created).toMatchObject({ due_date: "2190-01-01", rrule: "FREQ=DAILY;COUNT=2" });
     const rolled = (await call(token, "update_item", { id: created.id, completed: true })).data;
-    expect(rolled).toMatchObject({ due_date: "2999-01-02", rrule: "FREQ=DAILY;COUNT=1", completed_at: null });
+    expect(rolled).toMatchObject({ due_date: "2190-01-02", rrule: "FREQ=DAILY;COUNT=1", completed_at: null });
     const last = (await call(token, "update_item", { id: created.id, completed: true })).data;
-    expect(last).toMatchObject({ due_date: "2999-01-02", completed_at: expect.any(Number) });
+    expect(last).toMatchObject({ due_date: "2190-01-02", completed_at: expect.any(Number) });
     const cleared = (await call(token, "update_item", { id: created.id, due_date: null })).data;
     expect(cleared).toMatchObject({ due_date: null, rrule: null });
   });

@@ -3,7 +3,7 @@ import { useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { Item } from "../../shared/entities";
 import { newId } from "../../shared/ids";
-import { orderItems, positionAfter, reorderPosition } from "../../shared/items";
+import { orderItems, placeAfter, reorderPositions } from "../../shared/items";
 import { paletteVar } from "../components/ColorPicker";
 import { useDatePicker } from "../components/DatePicker";
 import { useDropOnto, useShortcuts, useSwipe, type DropSide } from "../components/gestures";
@@ -40,9 +40,18 @@ function writeCollapsed(ids: Set<string>): void {
 
 export default function ListPage() {
   const { listId } = useParams();
+  const { tables, settled } = useData();
+  // A list this device hasn't pulled yet (a fresh install, or one made through MCP) may still be on
+  // its way: wait for the first sync before deciding it's gone. The page itself mounts only once the
+  // list is here, so its gestures attach to rows that exist (they look for them once, on mount).
+  if (!listId || !tables.lists[listId]) return settled ? <Navigate to="/todo" replace /> : null;
+  return <ListView key={listId} listId={listId} />;
+}
+
+function ListView({ listId }: { listId: string }) {
   const { lists, items } = useData().tables;
   const now = useNow();
-  const list = listId ? lists[listId] : undefined;
+  const list = lists[listId] as (typeof lists)[string] | undefined;
   const allLists = useLists();
   // Where a new item is being typed: under the item with this id, or at the end (null). Right after
   // an item is added the draft moves under it, but stays under `before` until that item shows up.
@@ -64,7 +73,8 @@ export default function ListPage() {
   const justAdded = useRef(new Map<string, Item>());
   // A tap on blank space that ends an edit (by taking focus from its field) only ends it.
   const fieldClosedAt = useRef(0);
-  useSwipe(page, () => navigate("/todo"), 24);
+  // Back to the lists, as the back button would: replacing, so Android's Back doesn't reopen this list.
+  useSwipe(page, () => navigate("/todo", { replace: true }), 24);
   useShortcuts({ n: () => setDraft({ after: null }) });
 
   const { open, completed } = useMemo(
@@ -108,11 +118,15 @@ export default function ListPage() {
       void store.upsert("items", { ...item, parent_id });
     },
     {
-      accepts: (dragged, target, side) => reorderPosition(open, dragged, gapAt(target, side)) !== null,
+      accepts: (dragged, target, side) => reorderPositions(open, dragged, gapAt(target, side)) !== null,
       onReorder: (dragged, target, side) => {
-        const position = reorderPosition(open, dragged, gapAt(target, side));
-        const current = store.get("items", dragged);
-        if (position !== null && current) void store.upsert("items", { ...current, position });
+        const positions = reorderPositions(open, dragged, gapAt(target, side));
+        if (!positions) return;
+        const records = [...positions].flatMap(([id, position]) => {
+          const current = store.get("items", id);
+          return current ? [{ ...current, position }] : [];
+        });
+        void store.upsertMany("items", records);
       },
     },
   );
@@ -129,7 +143,8 @@ export default function ListPage() {
   const openSubtasks = new Map<string, number>();
   for (const { item, nested } of open) if (nested) openSubtasks.set(item.parent_id!, (openSubtasks.get(item.parent_id!) ?? 0) + 1);
 
-  if (!list) return <Navigate to="/todo" replace />;
+  // Deleted while open: ListPage sends the page back to the lists.
+  if (!list) return null;
 
   // A new item goes in as a sibling of the one it follows: a subtask under a subtask, and due the
   // same day, so it sorts beside it; its position puts it straight below.
@@ -154,7 +169,15 @@ export default function ListPage() {
       else known.push(added);
     }
     const after = (draft?.after && justAdded.current.get(draft.after)) || anchor?.item;
-    const position = after ? positionAfter(after, { due_date: inherited.due_date, due_time: null }, known) : null;
+    const { position, respaced } = after
+      ? placeAfter(after, { due_date: inherited.due_date, due_time: null }, known)
+      : { position: null, respaced: new Map<string, number>() };
+    // No room left below the anchor: its neighbours get spaced out first.
+    const moved = [...respaced].flatMap(([id, p]) => {
+      const current = store.get("items", id);
+      return current ? [{ ...current, position: p }] : [];
+    });
+    if (moved.length) void store.upsertMany("items", moved);
     const fields = {
       id,
       list_id: list.id,
@@ -235,6 +258,8 @@ export default function ListPage() {
       </h1>
 
       <ul className="rows rows--large" ref={openRows}>
+        {/* One flat, keyed array, the draft included wherever it is: as a separate child at the end,
+            it remounted (losing its text and focus) when the first item added there landed. */}
         {open.flatMap(({ item, nested }, i) => {
           const hidden = nested && collapsed.has(item.parent_id!);
           const count = openSubtasks.get(item.id);
@@ -264,7 +289,9 @@ export default function ListPage() {
                         },
                         onDetails: (edited) => {
                           setInline(null);
-                          setEditing(store.get("items", edited.id) ?? edited);
+                          // The title just saved hasn't reached the store yet (it writes IndexedDB first).
+                          const current = store.get("items", edited.id);
+                          setEditing(current ? { ...current, title: edited.title } : edited);
                         },
                       }
                     : undefined
@@ -274,8 +301,7 @@ export default function ListPage() {
           );
           // Flat and keyed, so the draft keeps its field (and the keyboard) as items land above it.
           return i === draftIndex && draftRow ? [row, draftRow] : [row];
-        })}
-        {draftIndex < 0 && draftRow}
+        }).concat(draftIndex < 0 && draftRow ? [draftRow] : [])}
       </ul>
       {/* The space under the rows: tapping it starts an item at the end, like a blank line. */}
       {!draft && (
@@ -317,7 +343,8 @@ export default function ListPage() {
         </section>
       )}
 
-      {editing && <ItemEditor item={editing} onClose={() => setEditing(null)} />}
+      {/* Keyed, so another item opened while this one animates closed gets an editor of its own. */}
+      {editing && <ItemEditor key={editing.id} item={editing} onClose={() => setEditing(null)} />}
       {editingList && (
         <ListEditor
           list={list}

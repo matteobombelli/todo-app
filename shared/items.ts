@@ -48,14 +48,55 @@ export function positionAfter(anchor: Item, slot: Pick<Item, "due_date" | "due_t
   return next === null ? null : (rank + next) / 2;
 }
 
+type Slot = Pick<Item, "due_date" | "due_time">;
+const sameSlot = (a: Slot, b: Slot) => a.due_date === b.due_date && a.due_time === b.due_time;
+
+/** Gap between ranks after respace: room for about 20 more halvings before the next respace. */
+const STEP = 1024;
+
 /**
- * The position that moves the open item `id` to `gap` in `open` (orderItems' display order), where
+ * New positions for `items` (already in order) spaced STEP apart from the first one's rank. Used
+ * when two neighbours' ranks can't be told apart any more: repeated halving runs out of float
+ * precision at epoch-millisecond scale, and records created together can share a rank.
+ */
+function respace(items: Item[]): Map<string, number> {
+  const base = items.length ? itemRank(items[0]) : 0;
+  return new Map(items.map((i, n) => [i.id, base + n * STEP]));
+}
+
+/** A rank strictly between two (either end open), or null when floats can't fit one there. */
+function between(lo: number | null, hi: number | null): number | null {
+  const p = lo !== null && hi !== null ? (lo + hi) / 2 : lo !== null ? lo + STEP : hi! - STEP;
+  return (lo === null || p > lo) && (hi === null || p < hi) ? p : null;
+}
+
+/**
+ * Where a new item due at `slot` goes to sort straight after `anchor`: its position (null to leave
+ * it to created_at, when the anchor is last or due at another slot), plus positions to write first
+ * for the slot's other items when there was no room left beside the anchor.
+ */
+export function placeAfter(anchor: Item, slot: Slot, items: Item[]): { position: number | null; respaced: Map<string, number> } {
+  const position = positionAfter(anchor, slot, items);
+  const none = new Map<string, number>();
+  if (position === null) return { position, respaced: none };
+  const rank = itemRank(anchor);
+  const next = Math.min(...items.filter((i) => i.id !== anchor.id && sameSlot(i, slot) && itemRank(i) > rank).map(itemRank));
+  if (position > rank && position < next) return { position, respaced: none };
+  const ordered = items.filter((i) => sameSlot(i, slot)).sort(compareItems);
+  const respaced = respace(ordered);
+  const after = ordered[ordered.findIndex((i) => i.id === anchor.id) + 1];
+  return { position: between(respaced.get(anchor.id)!, after ? respaced.get(after.id)! : null), respaced };
+}
+
+/**
+ * The positions that move the open item `id` to `gap` in `open` (orderItems' display order), where
  * gap g is the slot between rows g-1 and g; a top-level item takes its subtasks along. It can only
  * move among its siblings (the other top-level items, or its parent's other subtasks) due at the same
- * date and time, since the rest of the order comes from due dates. Null when the gap is somewhere
- * else, or where the item already is.
+ * date and time, since the rest of the order comes from due dates. Usually just the item's own
+ * position; when its new neighbours' ranks leave no room, its slot's items are respaced too. Null
+ * when the gap is somewhere else, or where the item already is.
  */
-export function reorderPosition(open: { item: Item; nested: boolean }[], id: string, gap: number): number | null {
+export function reorderPositions(open: { item: Item; nested: boolean }[], id: string, gap: number): Map<string, number> | null {
   const dragged = open.find((o) => o.item.id === id);
   if (!dragged) return null;
   const moving = (o: { item: Item; nested: boolean }) => o.item.id === id || (!dragged.nested && o.nested && o.item.parent_id === id);
@@ -76,21 +117,31 @@ export function reorderPosition(open: { item: Item; nested: boolean }[], id: str
     before = prev ? (prev.nested ? (open.find((o) => o.item.id === prev.item.parent_id)?.item ?? null) : prev.item) : null;
     after = next?.item ?? null;
   }
-  const same = (i: Item | null) => i !== null && i.due_date === dragged.item.due_date && i.due_time === dragged.item.due_time;
+  const same = (i: Item | null) => i !== null && sameSlot(i, dragged.item);
   if (!same(before)) before = null;
   if (!same(after)) after = null;
   if (!before && !after) return null;
-  const position = before && after ? (itemRank(before) + itemRank(after)) / 2 : before ? itemRank(before) + 1 : itemRank(after!) - 1;
 
-  // Check that the order this gives is the one asked for, and that it changes anything.
   const ids = open.map((o) => o.item.id);
   const block = open.filter(moving).map((o) => o.item.id);
   const rest = open.filter((o) => !moving(o)).map((o) => o.item.id);
   const at = prev ? rest.indexOf(prev.item.id) + 1 : 0;
   const wanted = [...rest.slice(0, at), ...block, ...rest.slice(at)];
   if (wanted.join() === ids.join()) return null;
-  const got = orderItems(open.map((o) => (o.item.id === id ? { ...o.item, position } : o.item))).open.map((o) => o.item.id);
-  return got.join() === wanted.join() ? position : null;
+  // Whether these positions give the order asked for.
+  const gives = (positions: Map<string, number>) =>
+    orderItems(open.map((o) => (positions.has(o.item.id) ? { ...o.item, position: positions.get(o.item.id)! } : o.item)))
+      .open.map((o) => o.item.id)
+      .join() === wanted.join();
+
+  const simple = between(before && itemRank(before), after && itemRank(after));
+  if (simple !== null && gives(new Map([[id, simple]]))) return new Map([[id, simple]]);
+  // No room: respace the slot's other items (keeping their order), then fit it between again.
+  const respaced = respace(open.map((o) => o.item).filter((i) => i.id !== id && sameSlot(i, dragged.item)).sort(compareItems));
+  const position = between(before && respaced.get(before.id)!, after && respaced.get(after.id)!);
+  if (position === null) return null;
+  respaced.set(id, position);
+  return gives(respaced) ? respaced : null;
 }
 
 /**

@@ -123,6 +123,24 @@ describe("dueReminders", () => {
     expect(await remindersFor(userId, "2026-09-26T16:00:00Z")).toEqual([]);
   });
 
+  it("still reminds everyone else when one user's reminders fail", async () => {
+    const broken = await setup({ item_reminder_time: null });
+    const fine = await setup({ item_reminder_time: null });
+    await mutate(fine.cookie, [upsert("items", item(fine.listId, { due_date: "2026-09-26", due_time: "09:00" }))]);
+    // A timezone the runtime doesn't know makes nowIn throw for that user.
+    await env.DB.prepare("UPDATE users SET timezone = 'Nowhere/Atlantis' WHERE id = ?").bind(broken.userId).run();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(await remindersFor(fine.userId, "2026-09-26T07:00:00Z")).toHaveLength(1);
+  });
+
+  it("leaves out items in a deleted list", async () => {
+    const { cookie, userId, listId } = await setup({ item_reminder_time: null });
+    await mutate(cookie, [upsert("items", item(listId, { due_date: "2026-09-26", due_time: "09:00" }))]);
+    // As a delete racing an item's creation can leave it: the list gone, the item not.
+    await env.DB.prepare("UPDATE lists SET deleted_at = 1 WHERE id = ?").bind(listId).run();
+    expect(await remindersFor(userId, "2026-09-26T07:00:00Z")).toEqual([]);
+  });
+
   it("skips users without a subscription", async () => {
     const { cookie, userId, endpoint, listId } = await setup();
     await mutate(cookie, [upsert("items", item(listId, { due_date: "2026-09-26", due_time: "09:00" }))]);
