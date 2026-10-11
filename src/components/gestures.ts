@@ -189,6 +189,10 @@ function longPressDrag(
     d.li.style.transition = "transform var(--fast) var(--ease-out)";
     on.drop(d, e);
   };
+  // A key press (Return or Space on a button) clicks without a pointerdown; it never ends a drag.
+  const key = () => {
+    swallowClick = false;
+  };
   const click = (e: MouseEvent) => {
     if (!swallowClick) return;
     swallowClick = false;
@@ -209,6 +213,7 @@ function longPressDrag(
   list.addEventListener("pointerup", up);
   list.addEventListener("pointercancel", up);
   list.addEventListener("click", click, true);
+  list.addEventListener("keydown", key, true);
   list.addEventListener("contextmenu", block);
   list.addEventListener("dragstart", block);
   list.addEventListener("touchmove", blockScroll, { passive: false });
@@ -219,6 +224,7 @@ function longPressDrag(
     list.removeEventListener("pointerup", up);
     list.removeEventListener("pointercancel", up);
     list.removeEventListener("click", click, true);
+    list.removeEventListener("keydown", key, true);
     list.removeEventListener("contextmenu", block);
     list.removeEventListener("dragstart", block);
     list.removeEventListener("touchmove", blockScroll);
@@ -287,27 +293,36 @@ export function useSortable(ref: RefObject<HTMLElement | null>, order: string, o
   }, [ref]);
 }
 
+export type DropSide = "before" | "after";
+
 /**
  * Long-press dropping of one row onto another, for the <li> children of the list `ref`, each
  * carrying its record's id in `data-id`. While a lifted row hovers a row that `accepts` it, that row
  * is marked as the target; `onDrop(dragged, target)` gets `null` for a drop onto no row.
+ *
+ * With `reorder`, the top and bottom of each row (a quarter each, or half when the row isn't a
+ * target) drop before or after it instead, wherever `reorder.accepts` allows, shown by a line.
  */
 export function useDropOnto(
   ref: RefObject<HTMLElement | null>,
   order: string,
   accepts: (dragged: string, target: string) => boolean,
   onDrop: (dragged: string, target: string | null) => void,
+  reorder?: {
+    accepts: (dragged: string, target: string, side: DropSide) => boolean;
+    onReorder: (dragged: string, target: string, side: DropSide) => void;
+  },
 ): void {
-  const callbacks = useRef({ accepts, onDrop });
+  const callbacks = useRef({ accepts, onDrop, reorder });
   useEffect(() => {
-    callbacks.current = { accepts, onDrop };
+    callbacks.current = { accepts, onDrop, reorder };
   });
   useSettleOnOrder(ref, order);
 
   useEffect(() => {
     const list = ref.current;
     if (!list) return;
-    let over: HTMLElement | null = null;
+    let over: { row: HTMLElement; className: string } | null = null;
     let slot: DOMRect | null = null;
 
     // The lifted row is always under the pointer, so look past it.
@@ -316,10 +331,24 @@ export function useDropOnto(
         .elementsFromPoint(e.clientX, e.clientY)
         .map((el) => el.closest("li"))
         .find((el): el is HTMLLIElement => !!el && el !== li && el.parentElement === list && !!el.dataset.id) ?? null;
-    const mark = (row: HTMLElement | null) => {
-      over?.classList.remove("drag--target");
-      over = row;
-      over?.classList.add("drag--target");
+    // Where the lifted row would land: onto a row (side null), beside one, or nowhere.
+    const aim = (li: HTMLElement, e: PointerEvent): { row: HTMLElement; side: DropSide | null } | null => {
+      const row = rowUnder(li, e);
+      if (!row) return null;
+      const { accepts, reorder } = callbacks.current;
+      const [dragged, target] = [li.dataset.id!, row.dataset.id!];
+      const onto = accepts(dragged, target);
+      const box = row.getBoundingClientRect();
+      const share = (e.clientY - box.top) / box.height;
+      const edge = onto ? 0.25 : 0.5;
+      const side = share < edge ? "before" : share >= 1 - edge ? "after" : null;
+      if (side && reorder?.accepts(dragged, target, side)) return { row, side };
+      return onto ? { row, side: null } : null;
+    };
+    const mark = (target: { row: HTMLElement; side: DropSide | null } | null) => {
+      over?.row.classList.remove(over.className);
+      over = target && { row: target.row, className: target.side ? `drag--gap-${target.side}` : "drag--target" };
+      over?.row.classList.add(over.className);
     };
 
     return longPressDrag(list, {
@@ -329,8 +358,7 @@ export function useDropOnto(
       },
       move: ({ li, y }, e) => {
         li.style.transform = `translateY(${e.clientY - y}px)`;
-        const row = rowUnder(li, e);
-        mark(row && callbacks.current.accepts(li.dataset.id!, row.dataset.id!) ? row : null);
+        mark(aim(li, e));
       },
       drop: ({ li }, e) => {
         mark(null);
@@ -338,11 +366,11 @@ export function useDropOnto(
         // Snaps back; a change lands when the list re-renders (useSettleOnOrder).
         li.style.transform = "";
         if (e.type !== "pointerup") return;
-        const row = rowUnder(li, e);
         const dragged = li.dataset.id!;
-        if (row) {
-          if (callbacks.current.accepts(dragged, row.dataset.id!)) callbacks.current.onDrop(dragged, row.dataset.id!);
-        } else if (slot && (e.clientY < slot.top || e.clientY > slot.bottom)) {
+        const target = aim(li, e);
+        if (target?.side) callbacks.current.reorder?.onReorder(dragged, target.row.dataset.id!, target.side);
+        else if (target) callbacks.current.onDrop(dragged, target.row.dataset.id!);
+        else if (!rowUnder(li, e) && slot && (e.clientY < slot.top || e.clientY > slot.bottom)) {
           // Let go over no row and away from where it started: dropped onto nothing.
           callbacks.current.onDrop(dragged, null);
         }

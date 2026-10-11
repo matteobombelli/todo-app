@@ -1,4 +1,4 @@
-import { CalendarArrowUp, CalendarDays, CalendarX, FolderInput, ListIndentDecrease, Pencil, Sun, Sunrise, Trash2 } from "lucide-react";
+import { AlarmClockOff, CalendarArrowUp, CalendarDays, CalendarX, FolderInput, ListIndentDecrease, Pencil, Sun, Sunrise, Trash2 } from "lucide-react";
 import { addDays } from "../../shared/dates";
 import type { Item, List } from "../../shared/entities";
 import { paletteVar } from "../components/ColorPicker";
@@ -20,7 +20,7 @@ function patchItem(id: string, patch: Partial<Item>): void {
 
 /**
  * Rescheduling choices for an item: today, tomorrow, next week, any date (through `pickDate`, the
- * browser's picker; left out without it), or no date.
+ * date sheet; left out without it), no time, or no date.
  */
 export function dateEntries(item: Item, pickDate?: (initial: string, onPick: (date: string) => void) => void): MenuEntry[] {
   const today = localNow().date;
@@ -33,6 +33,9 @@ export function dateEntries(item: Item, pickDate?: (initial: string, onPick: (da
     { label: "Next Week", icon: CalendarArrowUp, onSelect: reschedule(addDays(today, 7)) },
     ...(pickDate
       ? [{ label: "Choose Date…", icon: CalendarDays, onSelect: () => pickDate(item.due_date ?? today, (date) => reschedule(date)()) }]
+      : []),
+    ...(item.due_date && item.due_time
+      ? [{ label: "Remove Time", icon: AlarmClockOff, onSelect: () => patchItem(item.id, { due_time: null }) }]
       : []),
     // A repeating item needs its date.
     ...(item.due_date && !item.rrule

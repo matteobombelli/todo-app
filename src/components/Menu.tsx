@@ -30,6 +30,8 @@ interface Open {
   entries: MenuEntry[];
   /** A pointer position (right-click) or the element that opened it (a kebab button). */
   at: { x: number; y: number } | DOMRect;
+  /** What was clicked: the menu closes once a scroll moves it. */
+  anchor: Element;
 }
 
 /** Room kept between the menu and the viewport edges. */
@@ -56,11 +58,12 @@ export function useMenu(): [menu: ReactNode, show: (e: MouseEvent, entries: Menu
       // Already handled (a long-press drag blocks it), or a touch long-press.
       if (e.defaultPrevented || (e.nativeEvent as PointerEvent).pointerType === "touch") return;
       e.preventDefault();
-      setOpen({ key: ++count.current, entries, at: { x: e.clientX, y: e.clientY } });
+      setOpen({ key: ++count.current, entries, at: { x: e.clientX, y: e.clientY }, anchor: e.target as Element });
     } else {
       e.stopPropagation();
-      const at = atPointer ? { x: e.clientX, y: e.clientY } : (e.currentTarget as Element).getBoundingClientRect();
-      setOpen({ key: ++count.current, entries, at });
+      const anchor = e.currentTarget as Element;
+      const at = atPointer ? { x: e.clientX, y: e.clientY } : anchor.getBoundingClientRect();
+      setOpen({ key: ++count.current, entries, at, anchor });
     }
     setShown(true);
   }, []);
@@ -70,6 +73,7 @@ export function useMenu(): [menu: ReactNode, show: (e: MouseEvent, entries: Menu
       key={open.key}
       entries={open.entries}
       at={open.at}
+      anchor={open.anchor}
       shown={shown}
       onClose={() => setShown(false)}
       onExited={() => setOpen(null)}
@@ -81,6 +85,7 @@ export function useMenu(): [menu: ReactNode, show: (e: MouseEvent, entries: Menu
 function MenuPopover({
   entries,
   at,
+  anchor,
   shown,
   onClose,
   onExited,
@@ -146,20 +151,27 @@ function MenuPopover({
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
     const close = () => onClose();
+    // Only a scroll that moves what was clicked: scroll events also come with nothing moving (the
+    // end of a fling, a field scrolled into view), and closing then would swallow the tap.
+    const start = anchor.getBoundingClientRect();
+    const scrolled = () => {
+      const now = anchor.getBoundingClientRect();
+      if (!anchor.isConnected || Math.abs(now.top - start.top) > 2 || Math.abs(now.left - start.left) > 2) onClose();
+    };
     document.addEventListener("pointerdown", outside, true);
     // A right-click elsewhere opens that row's menu instead; this one makes way.
     document.addEventListener("contextmenu", outside, true);
     window.addEventListener("resize", close);
     window.addEventListener("blur", close);
-    document.addEventListener("scroll", close, true);
+    document.addEventListener("scroll", scrolled, true);
     return () => {
       document.removeEventListener("pointerdown", outside, true);
       document.removeEventListener("contextmenu", outside, true);
       window.removeEventListener("resize", close);
       window.removeEventListener("blur", close);
-      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("scroll", scrolled, true);
     };
-  }, [shown, onClose]);
+  }, [shown, onClose, anchor]);
 
   function onKeyDown(e: KeyboardEvent) {
     const items = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];

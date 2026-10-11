@@ -3,10 +3,10 @@ import { useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { Item } from "../../shared/entities";
 import { newId } from "../../shared/ids";
-import { orderItems, positionAfter } from "../../shared/items";
+import { orderItems, positionAfter, reorderPosition } from "../../shared/items";
 import { paletteVar } from "../components/ColorPicker";
 import { useDatePicker } from "../components/DatePicker";
-import { useDropOnto, useShortcuts, useSwipe } from "../components/gestures";
+import { useDropOnto, useShortcuts, useSwipe, type DropSide } from "../components/gestures";
 import { IconButton } from "../components/IconButton";
 import { useMenu } from "../components/Menu";
 import { removeWithUndo } from "../components/UndoToast";
@@ -59,6 +59,9 @@ export default function ListPage() {
   const [datePicker, pickDate] = useDatePicker();
 
   const openRows = useRef<HTMLUListElement>(null);
+  // Items added from the draft that the store hasn't shown yet (it writes IndexedDB first), so a
+  // quick second Return still goes below the first rather than level with it.
+  const justAdded = useRef(new Map<string, Item>());
   // A tap on blank space that ends an edit (by taking focus from its field) only ends it.
   const fieldClosedAt = useRef(0);
   useSwipe(page, () => navigate("/todo"), 24);
@@ -71,9 +74,18 @@ export default function ListPage() {
 
   // Dropping an item onto another makes it a subtask; onto a subtask, a sibling of it (one level
   // deep). Dropping a subtask onto no item makes it top-level again. An item with subtasks stays put,
-  // and repeating items are never subtasks or parents.
+  // and repeating items are never subtasks or parents. Dropping it between two rows moves it there,
+  // among its siblings due at the same time (reorderPosition).
   const parentFor = (target: string) => items[target].parent_id ?? target;
   const hasSubtasks = (id: string) => Object.values(items).some((i) => i.parent_id === id);
+  const gapAt = (target: string, side: DropSide) => {
+    let gap = open.findIndex((o) => o.item.id === target);
+    if (side === "before") return gap;
+    gap++;
+    // After a folded parent is after its hidden subtasks.
+    if (!open[gap - 1].nested && collapsed.has(target)) while (open[gap]?.nested) gap++;
+    return gap;
+  };
   useDropOnto(
     openRows,
     open.map(({ item, nested }) => `${item.id}${nested ? ">" : ""}`).join(),
@@ -94,6 +106,14 @@ export default function ListPage() {
       // Show where it went rather than folding it straight out of sight.
       if (parent_id) setFolded(parent_id, false);
       void store.upsert("items", { ...item, parent_id });
+    },
+    {
+      accepts: (dragged, target, side) => reorderPosition(open, dragged, gapAt(target, side)) !== null,
+      onReorder: (dragged, target, side) => {
+        const position = reorderPosition(open, dragged, gapAt(target, side));
+        const current = store.get("items", dragged);
+        if (position !== null && current) void store.upsert("items", { ...current, position });
+      },
     },
   );
 
@@ -125,13 +145,17 @@ export default function ListPage() {
     due_date: anchor && !anchor.item.parent_id ? anchor.item.due_date : null,
   };
 
-  function onAdd(title: string) {
+  function onAdd(title: string, next: boolean) {
     if (!list) return;
     const id = newId();
-    const position = anchor
-      ? positionAfter(anchor.item, { due_date: inherited.due_date, due_time: null }, open.map((o) => o.item))
-      : null;
-    void store.upsert("items", {
+    const known = open.map((o) => o.item);
+    for (const [addedId, added] of justAdded.current) {
+      if (items[addedId]) justAdded.current.delete(addedId);
+      else known.push(added);
+    }
+    const after = (draft?.after && justAdded.current.get(draft.after)) || anchor?.item;
+    const position = after ? positionAfter(after, { due_date: inherited.due_date, due_time: null }, known) : null;
+    const fields = {
       id,
       list_id: list.id,
       title,
@@ -142,9 +166,12 @@ export default function ListPage() {
       parent_id: inherited.parent_id,
       rrule: null,
       position,
-    });
-    // The next one goes under this one.
-    if (draft) setDraft({ after: id, before: anchor?.item.id ?? null });
+    };
+    const now = Date.now();
+    justAdded.current.set(id, { ...fields, created_at: now, updated_at: now, seq: 0, deleted_at: null });
+    void store.upsert("items", fields);
+    // After Return the next one goes under this one; leaving the field just closes the row.
+    if (draft && next) setDraft({ after: id, before: anchor?.item.id ?? null });
   }
 
   const draftRow = draft && (

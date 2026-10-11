@@ -2,7 +2,7 @@ import { CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, Info, ListPlus, 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useSearchParams } from "react-router";
 import type { ExternalEvent } from "../../shared/agenda";
-import { addDays, daysInMonth, isDate, makeDate, weekStart } from "../../shared/dates";
+import { addDays, addMonths, isDate, weekStart } from "../../shared/dates";
 import type { Item, List } from "../../shared/entities";
 import type { Occurrence } from "../../shared/recurrence";
 import { STD_APP_URL } from "../../shared/std";
@@ -30,13 +30,6 @@ const VIEWS: { value: View; label: string }[] = [
   { value: "week", label: "Week" },
   { value: "day", label: "Day" },
 ];
-
-function addMonths(date: string, n: number): string {
-  const total = Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1 + n;
-  const year = Math.floor(total / 12);
-  const month = (total % 12) + 1;
-  return makeDate(year, month, Math.min(Number(date.slice(8)), daysInMonth(year, month)));
-}
 
 function range(view: View, date: string): { from: string; to: string } {
   if (view === "day") return { from: date, to: date };

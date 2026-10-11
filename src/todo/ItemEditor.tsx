@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { X } from "lucide-react";
+import { useId, useMemo, useState, type FormEvent, type MouseEvent } from "react";
 import type { Item } from "../../shared/entities";
 import { newId } from "../../shared/ids";
 import { Modal, useModal } from "../components/Modal";
@@ -31,6 +32,7 @@ export function ItemEditor({
   const [repeat, setRepeat] = useState(() => repeatFromRRule(item?.rrule ?? null, item?.due_date ?? initial?.due_date ?? localNow().date));
   const [listId, setListId] = useState(item?.list_id ?? initial?.list_id ?? lists[0]?.id ?? "");
   const [modal, close] = useModal(onClose);
+  const fieldId = useId();
 
   const subtaskCount = useMemo(() => Object.values(items).filter((i) => i.parent_id === id).length, [items, id]);
   const parentId = item?.parent_id ?? null;
@@ -64,6 +66,13 @@ export function ItemEditor({
     if (changed && listId) void store.upsert("items", next);
   }
 
+  // A clear button goes once its field is empty: from the keyboard (no pointer, so no click
+  // detail), focus moves to the field rather than off the page. A tap leaves it, so iOS doesn't
+  // reopen the picker.
+  function refocus(e: MouseEvent<HTMLButtonElement>) {
+    if (e.detail === 0) (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
+  }
+
   function done() {
     save();
     close();
@@ -91,15 +100,51 @@ export function ItemEditor({
           <span className="field__label">Notes</span>
           <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
+        {/* Clear buttons, since a native date or time field can't be emptied everywhere (iOS). */}
         <div className="field-row">
-          <label className="field">
-            <span className="field__label">Due date</span>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field__label">Time (optional)</span>
-            <input type="time" value={dueTime} disabled={!dueDate} onChange={(e) => setDueTime(e.target.value)} />
-          </label>
+          <div className="field">
+            <label className="field__label" htmlFor={`${fieldId}-date`}>
+              Due date
+            </label>
+            <div className="field__control">
+              <input id={`${fieldId}-date`} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              {dueDate && (
+                <button
+                  type="button"
+                  className="button--plain field__clear"
+                  aria-label="Clear date"
+                  onClick={(e) => {
+                    setDueDate("");
+                    setDueTime("");
+                    refocus(e);
+                  }}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor={`${fieldId}-time`}>
+              Time (optional)
+            </label>
+            <div className="field__control">
+              <input id={`${fieldId}-time`} type="time" value={dueTime} disabled={!dueDate} onChange={(e) => setDueTime(e.target.value)} />
+              {dueDate && dueTime && (
+                <button
+                  type="button"
+                  className="button--plain field__clear"
+                  aria-label="Clear time"
+                  onClick={(e) => {
+                    setDueTime("");
+                    refocus(e);
+                  }}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
         {canRepeat && (
           <RepeatFields repeat={repeat} startDate={dueDate} onChange={(patch: Partial<RepeatForm>) => setRepeat((r) => ({ ...r, ...patch }))} />

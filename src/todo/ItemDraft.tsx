@@ -13,7 +13,8 @@ export function ItemDraft({
 }: {
   nested?: boolean;
   chip?: string | null;
-  onAdd: (title: string) => void;
+  /** `next` is true for Return, which keeps the row open for another item. */
+  onAdd: (title: string, next: boolean) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState("");
@@ -23,12 +24,16 @@ export function ItemDraft({
     e.preventDefault();
     const trimmed = title.trim();
     if (!trimmed) return onClose();
-    onAdd(trimmed);
+    onAdd(trimmed, true);
     setTitle("");
   }
 
   function onBlur() {
-    if (!cancelled.current && title.trim()) onAdd(title.trim());
+    if (!cancelled.current && title.trim()) onAdd(title.trim(), false);
+    // The row can outlive this (a newer draft in its place keeps the component), so it never
+    // keeps text that was already added.
+    setTitle("");
+    cancelled.current = false;
     onClose();
   }
 

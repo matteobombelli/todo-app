@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAgenda, type ExternalEvent } from "../../shared/agenda";
 import type { Item } from "../../shared/entities";
-import { cascadeToSubtasks, isOverdue, orderItems, positionAfter } from "../../shared/items";
+import { cascadeToSubtasks, isOverdue, orderItems, positionAfter, reorderPosition } from "../../shared/items";
 import type { Occurrence } from "../../shared/recurrence";
 
 let n = 0;
@@ -163,6 +163,74 @@ describe("positionAfter", () => {
     const last = item();
     expect(positionAfter(last, { due_date: null, due_time: null }, [item({ created_at: 0 }), last])).toBeNull();
     expect(positionAfter(item({ due_date: "2026-09-01", due_time: "09:00" }), { due_date: "2026-09-01", due_time: null }, [])).toBeNull();
+  });
+});
+
+describe("reorderPosition", () => {
+  // Moves `id` to `gap` and returns the new display order, or null when the move is refused.
+  function move(items: Item[], id: string, gap: number): string[] | null {
+    const { open } = orderItems(items);
+    const position = reorderPosition(open, id, gap);
+    if (position === null) return null;
+    return orderItems(items.map((i) => (i.id === id ? { ...i, position } : i))).open.map(({ item }) => item.id);
+  }
+
+  it("moves an undated item to the top, between two others and to the bottom", () => {
+    const [a, b, c, d] = [item(), item(), item(), item()];
+    const all = [a, b, c, d];
+    expect(move(all, c.id, 0)).toEqual([c.id, a.id, b.id, d.id]);
+    expect(move(all, a.id, 2)).toEqual([b.id, a.id, c.id, d.id]);
+    expect(move(all, a.id, 4)).toEqual([b.id, c.id, d.id, a.id]);
+  });
+
+  it("refuses the gaps where the item already is", () => {
+    const [a, b, c] = [item(), item(), item()];
+    expect(move([a, b, c], b.id, 1)).toBeNull();
+    expect(move([a, b, c], b.id, 2)).toBeNull();
+  });
+
+  it("moves among items due at the same date and time, but not into another slot", () => {
+    const early = item({ due_date: "2026-09-01" });
+    const [x, y] = [item({ due_date: "2026-09-02" }), item({ due_date: "2026-09-02" })];
+    const timed = item({ due_date: "2026-09-02", due_time: "08:00" });
+    const undated = item();
+    const all = [early, x, y, timed, undated];
+    // Order: early, timed, x, y, undated.
+    expect(move(all, y.id, 2)).toEqual([early.id, timed.id, y.id, x.id, undated.id]);
+    expect(move(all, y.id, 0)).toBeNull();
+    expect(move(all, undated.id, 2)).toBeNull();
+    expect(move(all, x.id, 5)).toBeNull();
+  });
+
+  it("keeps a parent's subtasks with it, and never drops an item inside another's subtasks", () => {
+    const parent = item();
+    const [s1, s2] = [item({ parent_id: parent.id }), item({ parent_id: parent.id })];
+    const other = item();
+    const all = [parent, s1, s2, other];
+    // Order: parent, s1, s2, other.
+    expect(move(all, other.id, 0)).toEqual([other.id, parent.id, s1.id, s2.id]);
+    expect(move(all, parent.id, 4)).toEqual([other.id, parent.id, s1.id, s2.id]);
+    expect(move(all, other.id, 1)).toBeNull();
+    expect(move(all, other.id, 2)).toBeNull();
+  });
+
+  it("reorders a subtask within its parent only", () => {
+    const parent = item();
+    const [s1, s2, s3] = [item({ parent_id: parent.id }), item({ parent_id: parent.id }), item({ parent_id: parent.id })];
+    const other = item();
+    const all = [parent, s1, s2, s3, other];
+    expect(move(all, s3.id, 1)).toEqual([parent.id, s3.id, s1.id, s2.id, other.id]);
+    expect(move(all, s1.id, 4)).toEqual([parent.id, s2.id, s3.id, s1.id, other.id]);
+    expect(move(all, s1.id, 0)).toBeNull();
+    expect(move(all, s1.id, 5)).toBeNull();
+  });
+
+  it("orders placed items against unplaced ones by created_at", () => {
+    const a = item({ created_at: 1000 });
+    const b = item({ created_at: 2000, position: 500 });
+    const c = item({ created_at: 3000 });
+    // Order: b (500), a (1000), c (3000).
+    expect(move([a, b, c], c.id, 1)).toEqual([b.id, c.id, a.id]);
   });
 });
 

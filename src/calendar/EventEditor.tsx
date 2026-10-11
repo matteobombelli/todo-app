@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { addDays, daysBetween, isDate, toMinutes } from "../../shared/dates";
 import type { PaletteKey } from "../../shared/palette";
 import type { Occurrence } from "../../shared/recurrence";
@@ -98,6 +98,8 @@ export function EventEditor({
   const [asking, setAsking] = useState<"save" | "delete" | null>(null);
   const seriesRule = occurrence ? (store.get("events", occurrence.event_id)?.rrule ?? null) : null;
   const [modal, close] = useModal(onClose);
+  // Set while a save or delete is being written, so a second Return or Done can't apply it twice.
+  const running = useRef(false);
 
   const set = <K extends keyof EventForm>(key: K, value: EventForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const setRepeat = (patch: Partial<RepeatForm>) => setForm((f) => ({ ...f, repeat: { ...f.repeat, ...patch } }));
@@ -112,13 +114,21 @@ export function EventEditor({
   }
 
   async function run(action: "save" | "delete", scope: Scope) {
-    if (action === "save") await saveEvent(form, occurrence, scope);
-    else if (occurrence) await deleteEvent(occurrence, scope);
+    if (running.current) return;
+    running.current = true;
+    try {
+      if (action === "save") await saveEvent(form, occurrence, scope);
+      else if (occurrence) await deleteEvent(occurrence, scope);
+    } catch (e) {
+      // Not written: let it be tried again. On success it stays set while the editor closes.
+      running.current = false;
+      throw e;
+    }
     close();
   }
 
   function done() {
-    if (asking) return;
+    if (asking || running.current) return;
     // Untouched, or a new event never given a title: nothing to save.
     if (JSON.stringify(form) === JSON.stringify(initial) || (!occurrence && !form.title.trim())) return close();
     const message = validateEvent(form);

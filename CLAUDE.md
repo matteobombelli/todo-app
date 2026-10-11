@@ -50,7 +50,8 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
   choices, and touch swipes check it off (right) or delete it (left). Deletes never confirm: they
   hide the record and offer Undo (`components/UndoToast.tsx`, `store.removeLater`), writing the
   delete only once the toast is gone or the page is hidden. Editors save as they close (a Done
-  button, no Save/Cancel). `push.ts` subscribes the browser to reminders. `public/push-sw.js` is imported into the generated
+  button, no Save/Cancel). "Choose Date…" opens an in-app month sheet (`components/DatePicker.tsx`):
+  iOS won't open a native date picker from code. `push.ts` subscribes the browser to reminders. `public/push-sw.js` is imported into the generated
   service worker to show them.
 
 ## Sync model
@@ -79,7 +80,9 @@ SPA (static assets), the JSON API, the MCP endpoint and the OAuth endpoints. Cus
 Open items sort by due date, then time (a date's untimed items after its timed ones), undated last;
 items due at the same date and time by `itemRank`: `position` if set, else `created_at`. An item
 added below another gets a `position` between it and the next item at that slot (`positionAfter`),
-so it lands right below; items added at the end, or by MCP, leave `position` null.
+so it lands right below; items added at the end, or by MCP, leave `position` null. Dragging an
+item between two rows (the top or bottom of a row; its middle makes a subtask) sets a `position`
+from its new neighbours (`reorderPosition`), only among its siblings due at the same date and time.
 
 ## Repeating items
 

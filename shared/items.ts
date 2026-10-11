@@ -49,6 +49,51 @@ export function positionAfter(anchor: Item, slot: Pick<Item, "due_date" | "due_t
 }
 
 /**
+ * The position that moves the open item `id` to `gap` in `open` (orderItems' display order), where
+ * gap g is the slot between rows g-1 and g; a top-level item takes its subtasks along. It can only
+ * move among its siblings (the other top-level items, or its parent's other subtasks) due at the same
+ * date and time, since the rest of the order comes from due dates. Null when the gap is somewhere
+ * else, or where the item already is.
+ */
+export function reorderPosition(open: { item: Item; nested: boolean }[], id: string, gap: number): number | null {
+  const dragged = open.find((o) => o.item.id === id);
+  if (!dragged) return null;
+  const moving = (o: { item: Item; nested: boolean }) => o.item.id === id || (!dragged.nested && o.nested && o.item.parent_id === id);
+  const prev = open.slice(0, gap).filter((o) => !moving(o)).at(-1);
+  const next = open.slice(gap).find((o) => !moving(o));
+
+  let before: Item | null;
+  let after: Item | null;
+  if (dragged.nested) {
+    // Within its parent's subtasks: after the parent or one of them.
+    const parent = dragged.item.parent_id;
+    if (!prev || (prev.nested ? prev.item.parent_id !== parent : prev.item.id !== parent)) return null;
+    before = prev.nested ? prev.item : null;
+    after = next?.nested && next.item.parent_id === parent ? next.item : null;
+  } else {
+    // Never between a parent and its subtasks; after a block, the sibling above is its parent.
+    if (next?.nested) return null;
+    before = prev ? (prev.nested ? (open.find((o) => o.item.id === prev.item.parent_id)?.item ?? null) : prev.item) : null;
+    after = next?.item ?? null;
+  }
+  const same = (i: Item | null) => i !== null && i.due_date === dragged.item.due_date && i.due_time === dragged.item.due_time;
+  if (!same(before)) before = null;
+  if (!same(after)) after = null;
+  if (!before && !after) return null;
+  const position = before && after ? (itemRank(before) + itemRank(after)) / 2 : before ? itemRank(before) + 1 : itemRank(after!) - 1;
+
+  // Check that the order this gives is the one asked for, and that it changes anything.
+  const ids = open.map((o) => o.item.id);
+  const block = open.filter(moving).map((o) => o.item.id);
+  const rest = open.filter((o) => !moving(o)).map((o) => o.item.id);
+  const at = prev ? rest.indexOf(prev.item.id) + 1 : 0;
+  const wanted = [...rest.slice(0, at), ...block, ...rest.slice(at)];
+  if (wanted.join() === ids.join()) return null;
+  const got = orderItems(open.map((o) => (o.item.id === id ? { ...o.item, position } : o.item))).open.map((o) => o.item.id);
+  return got.join() === wanted.join() ? position : null;
+}
+
+/**
  * Open items in display order, each followed by its open subtasks (`nested`), and completed ones
  * most recently completed first. A subtask whose parent isn't open stands on its own.
  */

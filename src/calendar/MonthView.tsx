@@ -6,7 +6,7 @@ import type { Item, List } from "../../shared/entities";
 import { STD_COLOR } from "../../shared/palette";
 import type { Occurrence } from "../../shared/recurrence";
 import { paletteVar } from "../components/ColorPicker";
-import { formatShortWeekday } from "../format";
+import { formatLongDate, formatShortWeekday } from "../format";
 import { monthWeeks, placeBars } from "./layout";
 
 const MAX_LANES = 3;
@@ -100,7 +100,7 @@ export function MonthView({
                   className={classes.filter(Boolean).join(" ")}
                   style={{ gridColumn: i + 1 }}
                   aria-selected={date === selected}
-                  aria-label={date}
+                  aria-label={formatLongDate(date)}
                   onClick={() => onSelect(date)}
                 >
                   <span className="month__num">{Number(date.slice(8))}</span>

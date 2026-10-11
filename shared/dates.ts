@@ -51,6 +51,14 @@ export function makeDate(year: number, month: number, day: number): string {
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** The same day `n` months on, or the month's last day when it's shorter. */
+export function addMonths(date: string, n: number): string {
+  const total = Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1 + n;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  return makeDate(year, month, Math.min(Number(date.slice(8)), daysInMonth(year, month)));
+}
+
 /** Minutes since midnight. */
 export function toMinutes(time: string): number {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
