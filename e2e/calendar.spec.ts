@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, item, list, seed, serverState, test, today } from "./fixtures";
+import { expect, item, list, pick, seed, serverState, test, today } from "./fixtures";
 
 const live = <T extends { deleted_at: number | null }>(rows: T[]) => rows.filter((r) => !r.deleted_at);
 
@@ -53,8 +53,8 @@ test.describe("calendar", () => {
     await page.getByRole("menuitem", { name: "New Event" }).click();
     const editor = page.getByRole("dialog", { name: "New event" });
     await editor.getByLabel("Title").fill("Backwards");
-    await editor.getByLabel("At", { exact: true }).first().fill("15:00");
-    await editor.getByLabel("At", { exact: true }).last().fill("14:00");
+    await pick(editor, "Start time", "15:00");
+    await pick(editor, "End time", "14:00");
     await editor.getByRole("button", { name: "Done" }).click();
     await expect(editor.locator(".form__error")).toBeVisible();
     await expect(editor).toBeVisible();
@@ -107,24 +107,49 @@ test.describe("calendar", () => {
     await expect(agenda.getByRole("heading", { name: "Overdue" })).toHaveCount(0);
     void account;
   });
+  test("moving the start keeps the length; a duration sets the end; Escape closes only the picker", async ({ page, account }) => {
+    await page.goto("/calendar?view=month");
+    await page.getByRole("button", { name: "New event or to-do" }).click();
+    await page.getByRole("menuitem", { name: "New Event" }).click();
+    const editor = page.getByRole("dialog", { name: "New event" });
+    await editor.getByLabel("Title").fill("Call");
+    await pick(editor, "Start time", "2pm");
+    await expect(editor.getByRole("button", { name: /^End time:/ })).toHaveText("3:00 PM");
+
+    await editor.getByRole("button", { name: /^End time:/ }).click();
+    await editor.getByRole("group", { name: "Duration" }).getByRole("button", { name: "30 min" }).click();
+    await expect(editor.getByRole("button", { name: /^End time:/ })).toHaveText("2:30 PM");
+
+    await editor.getByRole("button", { name: /^Start date:/ }).click();
+    await editor.getByRole("textbox", { name: "Type a date" }).press("Escape");
+    await expect(editor.getByRole("textbox", { name: "Type a date" })).toHaveCount(0);
+    await expect(editor).toBeVisible();
+
+    await editor.getByRole("button", { name: "Done" }).click();
+    await expect
+      .poll(async () => live((await serverState(page.request)).events).map((e) => [e.start_time, e.end_time]))
+      .toEqual([["14:00", "14:30"]]);
+    void account;
+  });
+
   test("weekly days follow a moved start, and a repeat ending before it starts is refused", async ({ page, account }) => {
     await page.goto("/calendar?view=month");
     await page.getByRole("button", { name: "New event or to-do" }).click();
     await page.getByRole("menuitem", { name: "New Event" }).click();
     const editor = page.getByRole("dialog", { name: "New event" });
     await editor.getByLabel("Title").fill("Class");
-    await editor.getByLabel("Starts").fill("2026-11-02"); // a Monday
+    await pick(editor, "Start date", "2026-11-02"); // a Monday
     await editor.getByLabel("Repeat", { exact: true }).selectOption("WEEKLY");
-    await expect(editor.getByRole("button", { name: "MO" })).toHaveAttribute("aria-pressed", "true");
-    await editor.getByLabel("Starts").fill("2026-11-04"); // a Wednesday
-    await expect(editor.getByRole("button", { name: "WE" })).toHaveAttribute("aria-pressed", "true");
-    await expect(editor.getByRole("button", { name: "MO" })).toHaveAttribute("aria-pressed", "false");
+    await expect(editor.getByRole("button", { name: "MO", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await pick(editor, "Start date", "2026-11-04"); // a Wednesday
+    await expect(editor.getByRole("button", { name: "WE", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(editor.getByRole("button", { name: "MO", exact: true })).toHaveAttribute("aria-pressed", "false");
 
     await editor.getByLabel("Repeat ends").selectOption("until");
-    await editor.getByLabel("End date").fill("2026-11-01");
+    await pick(editor, "Repeats until", "2026-11-01");
     await editor.getByRole("button", { name: "Done" }).click();
     await expect(editor.getByRole("alert")).toContainText("repeat must end");
-    await editor.getByLabel("End date").fill("2026-12-31");
+    await pick(editor, "Repeats until", "2026-12-31");
     await editor.getByRole("button", { name: "Done" }).click();
     await expect(editor).toHaveCount(0);
     await expect

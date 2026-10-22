@@ -38,24 +38,28 @@ export default function LoginPage() {
     <main className="page page--centre">
       <form className="card card--auth" onSubmit={onSubmit}>
         <h1>Log in</h1>
-        <input
-          type="email"
-          placeholder="Email"
-          aria-label="Email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          aria-label="Password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="group">
+          <input
+            className="group__input"
+            type="email"
+            placeholder="Email"
+            aria-label="Email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            className="group__input"
+            type="password"
+            placeholder="Password"
+            aria-label="Password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
         {error && <p className="form__error" role="alert">{error}</p>}
         <button type="submit" className="button--primary button--icon" disabled={busy}>
           {busy && <Spinner inline />}

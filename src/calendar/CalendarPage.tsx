@@ -11,8 +11,8 @@ import { isSliding, resetSlide, slide, useShortcuts, useSwipe } from "../compone
 import { IconButton } from "../components/IconButton";
 import { useMenu, type MenuEntry } from "../components/Menu";
 import type { Now } from "../../shared/items";
-import { useData, useLists, useNow } from "../data/hooks";
-import { formatDayMonth, formatLongDate, formatMonthYear, formatTime } from "../format";
+import { localNow, useData, useLists, useNow } from "../data/hooks";
+import { formatDayRange, formatLongDate, formatMonthYear, formatTime } from "../format";
 import { ItemEditor } from "../todo/ItemEditor";
 import { itemMenu } from "../todo/itemMenu";
 import { AgendaPanel, type CalendarHandlers, type CalendarTarget } from "./AgendaPanel";
@@ -21,6 +21,7 @@ import { EventEditor, ScopeDialog } from "./EventEditor";
 import { deleteEvent } from "./eventActions";
 import { monthWeeks } from "./layout";
 import { MonthView } from "./MonthView";
+import { ShellActions } from "../Shell";
 import { StdSheet } from "./StdSheet";
 import { TimeGrid } from "./TimeGrid";
 
@@ -42,7 +43,7 @@ function title(view: View, date: string): string {
   if (view === "month") return formatMonthYear(date);
   if (view === "day") return formatLongDate(date);
   const { from, to } = range("week", date);
-  return `${formatDayMonth(from)} to ${formatDayMonth(to)}`;
+  return formatDayRange(from, to, localNow().date);
 }
 
 function stepDate(view: View, date: string, dir: 1 | -1): string {
@@ -239,6 +240,7 @@ export default function CalendarPage() {
             </button>
           ))}
         </div>
+        <ShellActions />
         <IconButton icon={Plus} label="New event or to-do" ariaHasPopup="menu" onClick={(e) => showMenu(e, newEntries(date))} className="cal-header__add" />
       </div>
 

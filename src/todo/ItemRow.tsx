@@ -104,33 +104,35 @@ export function ItemRow({
   // Pressing these must not take focus from the title being edited, which would end the edit
   // and unmount them before the click lands.
   const keepFocus = (e: MouseEvent) => edit && e.preventDefault();
-  const dateButton =
-    onDateMenu &&
-    (chip ? (
-      <button
-        type="button"
-        className={`${chipClass} chip--button`}
-        aria-haspopup="menu"
-        aria-label={`Due ${chip}, change`}
-        onMouseDown={keepFocus}
-        onClick={(e) => onDateMenu(e, item)}
-      >
-        {chip}
-      </button>
-    ) : (
-      edit && (
-        <IconButton icon={CalendarPlus} label="Add a date" className="row__kebab item__add-date" ariaHasPopup="menu" onMouseDown={keepFocus} onClick={(e) => onDateMenu(e, item)} />
-      )
-    ));
+  const dateButton = onDateMenu && chip && (
+    <button
+      type="button"
+      className={`${chipClass} chip--button`}
+      aria-haspopup="menu"
+      aria-label={`Due ${chip}, change`}
+      onMouseDown={keepFocus}
+      onClick={(e) => onDateMenu(e, item)}
+    >
+      {chip}
+    </button>
+  );
+  const addDate = onDateMenu && !chip && edit && (
+    <IconButton icon={CalendarPlus} label="Add a date" className="row__kebab item__add-date" ariaHasPopup="menu" onMouseDown={keepFocus} onClick={(e) => onDateMenu(e, item)} />
+  );
 
-  const body = (
+  const title = (
     <>
       {list && <span className="dot" style={{ background: paletteVar(list.color) }} aria-hidden="true" />}
       <span className="row__title">{item.title}</span>
-      {item.rrule && <Repeat size={14} className="item__repeat" aria-label="Repeats" />}
-      {chip && !onDateMenu && <span className={chipClass}>{chip}</span>}
-      {context && <span className="row__meta">{context}</span>}
     </>
+  );
+  // What's known about the item besides its title: under it in the todo tab, beside it elsewhere.
+  const meta = (dateButton || chip || item.rrule || context) && (
+    <span className="item__meta">
+      {dateButton || (chip && <span className={chipClass}>{chip}</span>)}
+      {item.rrule && <Repeat size={13} className="item__repeat" aria-label="Repeats" />}
+      {context && <span className="row__meta">{context}</span>}
+    </span>
   );
 
   return (
@@ -159,16 +161,19 @@ export function ItemRow({
             onChange={() => leaving || onToggle()}
             label={done ? `Mark "${item.title}" not done` : `Mark "${item.title}" done`}
           />
-          {edit ? (
-            <TitleField item={item} edit={edit} saveRef={saveTitle} />
-          ) : onTap ? (
-            <button type="button" className="item__body" onClick={() => onTap(item)}>
-              {body}
-            </button>
-          ) : (
-            <span className="item__body">{body}</span>
-          )}
-          {dateButton}
+          <div className="item__main">
+            {edit ? (
+              <TitleField item={item} edit={edit} saveRef={saveTitle} />
+            ) : onTap ? (
+              <button type="button" className="item__body" onClick={() => onTap(item)}>
+                {title}
+              </button>
+            ) : (
+              <span className="item__body">{title}</span>
+            )}
+            {meta}
+          </div>
+          {addDate}
           {edit && (
             <IconButton
               icon={Info}

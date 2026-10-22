@@ -1,4 +1,5 @@
 import { ChevronRight, Lock, Plus } from "lucide-react";
+import { ShellActions } from "../Shell";
 import { useState, type CSSProperties } from "react";
 import { Link } from "react-router";
 import type { Goal, GoalEntry } from "../../shared/entities";
@@ -73,6 +74,7 @@ export default function GoalsPage() {
   return (
     <div className="page page--goals">
       <div className="nav-bar">
+        <ShellActions />
         <button type="button" className="button--plain button--icon nav-bar__end" onClick={() => setCreating(true)}>
           <Plus size={20} aria-hidden="true" />
           New Goal
@@ -96,7 +98,7 @@ export default function GoalsPage() {
       {review.length > 0 && (
         <section className="goal-section">
           <h2 className="goal-section__heading">Needs Review</h2>
-          <ul className="rows">
+          <ul className="rows rows--large">
             {review.map((g) => (
               <GoalRow key={g.id} goal={g} meta={`Ended ${formatShortDate(g.end_date, today)}`} />
             ))}
@@ -106,7 +108,7 @@ export default function GoalsPage() {
       {drafts.length > 0 && (
         <section className="goal-section">
           <h2 className="goal-section__heading">Drafts</h2>
-          <ul className="rows">
+          <ul className="rows rows--large">
             {drafts.map((g) => (
               <GoalRow key={g.id} goal={g} meta="Not committed" />
             ))}
@@ -116,7 +118,7 @@ export default function GoalsPage() {
       {past.length > 0 && (
         <section className="goal-section">
           <h2 className="goal-section__heading">Past</h2>
-          <ul className="rows">
+          <ul className="rows rows--large">
             {past.map((g) => {
               const score = scorePercent(daysLogged(g, entries), g.target_days);
               return <GoalRow key={g.id} goal={g} meta={g.status === "abandoned" ? `${score}% · abandoned` : `${score}%`} />;

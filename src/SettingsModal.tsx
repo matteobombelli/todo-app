@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { EVENT_REMINDER_MINUTES, GOAL_REMINDER_TIMES, ITEM_REMINDER_TIMES, type SettingsBody } from "../shared/api";
 import { useAuth } from "./auth/AuthProvider";
 import { useConfirm } from "./components/ConfirmDialog";
+import { Switch } from "./components/Fields";
 import { Modal } from "./components/Modal";
 import { store } from "./data/instance";
 import { formatTime } from "./format";
@@ -87,75 +88,86 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <Modal open={open} onClose={onClose} title="Settings">
       <div className="form">
-        <p className="muted">Signed in as {user.email}</p>
-        <label className="field">
-          <span className="field__label">Timezone</span>
-          <select value={user.timezone} onChange={(e) => void onSettings({ timezone: e.target.value })}>
-            {zones.map((z) => (
-              <option key={z}>{z}</option>
-            ))}
-          </select>
-          <span className="field__hint">
+        <section>
+          <div className="group">
+            <label className="group__row">
+              <span className="group__name">Timezone</span>
+              <select value={user.timezone} onChange={(e) => void onSettings({ timezone: e.target.value })}>
+                {zones.map((z) => (
+                  <option key={z}>{z}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <span className="group-hint">
             Used by Claude to know what "today" is, to time reminders, and for which days goal effort can be logged.
             Otherwise the app uses this device's clock.
           </span>
-        </label>
-        <div className="field">
-          <span className="field__label">Notifications</span>
-          <div>
-            <button type="button" disabled={push !== "on" && push !== "off"} onClick={() => void onPushToggle()}>
-              {push === "on" ? "Turn off" : "Turn on"}
+        </section>
+        <section>
+          <h3 className="group-label">Reminders</h3>
+          <div className="group">
+            <label className="group__row">
+              <span className="group__name">Notifications</span>
+              <Switch checked={push === "on"} disabled={push !== "on" && push !== "off"} label="Notifications on this device" onChange={() => void onPushToggle()} />
+            </label>
+            <label className="group__row">
+              <span className="group__name">Events</span>
+              <select
+                value={user.event_reminder_minutes ?? 0}
+                onChange={(e) => void onSettings({ event_reminder_minutes: Number(e.target.value) })}
+              >
+                {EVENT_REMINDER_MINUTES.map((m) => (
+                  <option key={m} value={m}>
+                    {m === 0 ? "At start" : `${m} min before`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="group__row">
+              <span className="group__name">Untimed to-dos</span>
+              <select
+                value={user.item_reminder_time ?? ""}
+                onChange={(e) => void onSettings({ item_reminder_time: e.target.value || null })}
+              >
+                <option value="">None</option>
+                {ITEM_REMINDER_TIMES.map((t) => (
+                  <option key={t} value={t}>
+                    {formatTime(t)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="group__row">
+              <span className="group__name">Goals not logged</span>
+              <select
+                value={user.goal_reminder_time ?? ""}
+                onChange={(e) => void onSettings({ goal_reminder_time: e.target.value || null })}
+              >
+                <option value="">None</option>
+                {GOAL_REMINDER_TIMES.map((t) => (
+                  <option key={t} value={t}>
+                    {formatTime(t)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {push && <span className="group-hint">{PUSH_HINTS[push]}</span>}
+        </section>
+        {error && <p className="form__error" role="alert">{error}</p>}
+        <section>
+          <h3 className="group-label">Account</h3>
+          <div className="group">
+            <div className="group__row">
+              <span className="group__name">Signed in as</span>
+              <span className="group__value group__value--muted">{user.email}</span>
+            </div>
+            <button type="button" className="group__button group__button--danger" onClick={() => void onLogout()}>
+              Log out
             </button>
           </div>
-          {push && <span className="field__hint">{PUSH_HINTS[push]}</span>}
-        </div>
-        <label className="field">
-          <span className="field__label">Event reminders</span>
-          <select
-            value={user.event_reminder_minutes ?? 0}
-            onChange={(e) => void onSettings({ event_reminder_minutes: Number(e.target.value) })}
-          >
-            {EVENT_REMINDER_MINUTES.map((m) => (
-              <option key={m} value={m}>
-                {m === 0 ? "When the event starts" : `${m} minutes before`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="field__label">To-dos without a time</span>
-          <select
-            value={user.item_reminder_time ?? ""}
-            onChange={(e) => void onSettings({ item_reminder_time: e.target.value || null })}
-          >
-            <option value="">No reminder</option>
-            {ITEM_REMINDER_TIMES.map((t) => (
-              <option key={t} value={t}>
-                {`At ${formatTime(t)} on the day`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="field__label">Goals not logged today</span>
-          <select
-            value={user.goal_reminder_time ?? ""}
-            onChange={(e) => void onSettings({ goal_reminder_time: e.target.value || null })}
-          >
-            <option value="">No reminder</option>
-            {GOAL_REMINDER_TIMES.map((t) => (
-              <option key={t} value={t}>
-                {`At ${formatTime(t)}`}
-              </option>
-            ))}
-          </select>
-        </label>
-        {error && <p className="form__error" role="alert">{error}</p>}
-        <div className="form__actions">
-          <button type="button" onClick={() => void onLogout()}>
-            Log out
-          </button>
-        </div>
+        </section>
       </div>
       {confirmDialog}
     </Modal>

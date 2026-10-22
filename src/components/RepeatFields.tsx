@@ -1,4 +1,5 @@
 import { addDays, isDate, weekday } from "../../shared/dates";
+import { PickerRow } from "./Pickers";
 import { WEEKDAY_CODES, parseRRule, serializeRRule, type Freq } from "../../shared/recurrence";
 
 const FREQ_UNITS = { DAILY: "day", WEEKLY: "week", MONTHLY: "month", YEARLY: "year" } as const;
@@ -59,7 +60,10 @@ export function repeatProblem(repeat: RepeatForm, startDate: string): string | n
   return null;
 }
 
-/** The Repeat section of the event and item editors. `startDate` picks the default weekday. */
+/**
+ * The Repeat rows of the event and item editors, inside their `.group`. `startDate` picks the
+ * default weekday.
+ */
 export function RepeatFields({
   repeat,
   startDate,
@@ -70,9 +74,9 @@ export function RepeatFields({
   onChange: (patch: Partial<RepeatForm>) => void;
 }) {
   return (
-    <fieldset className="repeat">
-      <legend className="field__label">Repeat</legend>
-      <div className="field-row">
+    <>
+      <label className="group__row">
+        <span className="group__name">Repeat</span>
         <select
           aria-label="Repeat"
           value={repeat.freq}
@@ -83,49 +87,56 @@ export function RepeatFields({
             })
           }
         >
-          <option value="NONE">Does not repeat</option>
+          <option value="NONE">Never</option>
           <option value="DAILY">Daily</option>
           <option value="WEEKLY">Weekly</option>
           <option value="MONTHLY">Monthly</option>
           <option value="YEARLY">Yearly</option>
         </select>
-        {repeat.freq !== "NONE" && (
-          <label className="inline-field">
-            every
+      </label>
+      {repeat.freq !== "NONE" && (
+        <label className="group__row">
+          <span className="group__name">Every</span>
+          <span className="group__value">
             <input
               type="number"
+              inputMode="numeric"
               min={1}
               max={999}
               className="input--narrow"
+              aria-label="Every"
               value={repeat.interval}
               onChange={(e) => onChange({ interval: Number(e.target.value) })}
             />
             {FREQ_UNITS[repeat.freq]}
             {repeat.interval === 1 ? "" : "s"}
-          </label>
-        )}
-      </div>
+          </span>
+        </label>
+      )}
       {repeat.freq === "WEEKLY" && (
-        <div className="weekday-picker" role="group" aria-label="On">
-          {WEEKDAY_LETTERS.map((letter, day) => (
-            <button
-              key={day}
-              type="button"
-              aria-pressed={repeat.byDay.includes(day)}
-              aria-label={WEEKDAY_CODES[day]}
-              onClick={() =>
-                onChange({
-                  byDay: repeat.byDay.includes(day) ? repeat.byDay.filter((d) => d !== day) : [...repeat.byDay, day],
-                })
-              }
-            >
-              {letter}
-            </button>
-          ))}
+        <div className="group__row">
+          <div className="weekday-picker" role="group" aria-label="On">
+            {WEEKDAY_LETTERS.map((letter, day) => (
+              <button
+                key={day}
+                type="button"
+                aria-pressed={repeat.byDay.includes(day)}
+                aria-label={WEEKDAY_CODES[day]}
+                onClick={() =>
+                  onChange({
+                    byDay: repeat.byDay.includes(day) ? repeat.byDay.filter((d) => d !== day) : [...repeat.byDay, day],
+                  })
+                }
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {repeat.freq !== "NONE" && (
-        <div className="field-row">
+        <label className="group__row">
+          <span className="group__name">End Repeat</span>
           <select
             aria-label="Repeat ends"
             value={repeat.end}
@@ -136,28 +147,36 @@ export function RepeatFields({
               onChange(stale ? { end, until: addDays(startDate, 30) } : { end });
             }}
           >
-            <option value="never">Never ends</option>
-            <option value="until">Ends on</option>
-            <option value="count">Ends after</option>
+            <option value="never">Never</option>
+            <option value="until">On Date</option>
+            <option value="count">After</option>
           </select>
-          {repeat.end === "until" && (
-            <input type="date" aria-label="End date" required value={repeat.until} onChange={(e) => onChange({ until: e.target.value })} />
-          )}
-          {repeat.end === "count" && (
-            <label className="inline-field">
-              <input
-                type="number"
-                min={1}
-                max={10000}
-                className="input--narrow"
-                value={repeat.count}
-                onChange={(e) => onChange({ count: Number(e.target.value) })}
-              />
-              times
-            </label>
-          )}
-        </div>
+        </label>
       )}
-    </fieldset>
+      {repeat.freq !== "NONE" && repeat.end === "until" && (
+        <PickerRow
+          label="Until"
+          picks={[{ kind: "date", name: "Repeats until", value: repeat.until, onChange: (until) => onChange({ until }) }]}
+        />
+      )}
+      {repeat.freq !== "NONE" && repeat.end === "count" && (
+        <label className="group__row">
+          <span className="group__name">Occurrences</span>
+          <span className="group__value">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={10000}
+              className="input--narrow"
+              aria-label="Occurrences"
+              value={repeat.count}
+              onChange={(e) => onChange({ count: Number(e.target.value) })}
+            />
+            times
+          </span>
+        </label>
+      )}
+    </>
   );
 }

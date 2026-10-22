@@ -1,4 +1,4 @@
-import { expect, item, list, openTitles, row, rowMenu, seed, serverState, tapTitle, test, today } from "./fixtures";
+import { expect, item, list, openTitles, pick, row, rowMenu, seed, serverState, tapTitle, test, today } from "./fixtures";
 
 test.describe("items in a list", () => {
   test("Return adds items in order, leaving the field adds once and closes, Escape discards", async ({ page, account }) => {
@@ -152,7 +152,7 @@ test.describe("item menu", () => {
 
     // A time, then Remove Time keeps the date.
     await rowMenu(page, "Task", "Edit Details");
-    await page.getByLabel("Time (optional)").fill("14:30");
+    await pick(page.getByRole("dialog", { name: "Details" }), "Time", "14:30");
     await page.getByRole("button", { name: "Done" }).click();
     await expect.poll(async () => (await due()).due_time).toBe("14:30");
     await rowMenu(page, "Task", "Remove Time");
@@ -200,7 +200,7 @@ test.describe("item editor", () => {
     await rowMenu(page, "Task", "Edit Details");
     const dialog = page.getByRole("dialog", { name: "Details" });
     await dialog.getByRole("button", { name: "Clear time" }).click();
-    await expect(dialog.getByLabel("Time (optional)")).toHaveValue("");
+    await expect(dialog.getByRole("button", { name: /^Time:/ })).toHaveText("Add time");
     await expect(dialog.getByRole("button", { name: "Clear time" })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Done" }).click();
     await expect.poll(async () => (await saved()).due_time).toBeNull();
@@ -208,8 +208,8 @@ test.describe("item editor", () => {
 
     await rowMenu(page, "Task", "Edit Details");
     await dialog.getByRole("button", { name: "Clear date" }).click();
-    await expect(dialog.getByLabel("Due date")).toHaveValue("");
-    await expect(dialog.getByLabel("Time (optional)")).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: /^Due date:/ })).toHaveText("Add date");
+    await expect(dialog.getByRole("button", { name: /^Time:/ })).toHaveCount(0);
     await page.keyboard.press("Escape"); // closing saves too
     await expect.poll(async () => (await saved()).due_date).toBeNull();
     void account;
@@ -224,7 +224,7 @@ test.describe("item editor", () => {
     await rowMenu(page, "Task", "Edit Details");
     const dialog = page.getByRole("dialog", { name: "Details" });
     await dialog.getByLabel("Notes").fill("Some notes");
-    await dialog.getByLabel("Due date").fill(await today(page));
+    await pick(dialog, "Due date", await today(page));
     await dialog.getByRole("combobox").first().selectOption("WEEKLY");
     await dialog.getByLabel("List").selectOption({ label: "Work" });
     await dialog.getByRole("button", { name: "Done" }).click();
@@ -284,7 +284,7 @@ test.describe("editing safety", () => {
     const dialog = page.getByRole("dialog", { name: "Details" });
     await dialog.getByLabel("Repeat", { exact: true }).selectOption("DAILY");
     await dialog.getByLabel("Repeat ends").selectOption("until");
-    await dialog.getByLabel("End date").fill(await today(page, 2));
+    await pick(dialog, "Repeats until", await today(page, 2));
     await dialog.getByRole("button", { name: "Done" }).click();
     await expect(dialog.getByRole("alert")).toContainText("repeat must end");
     await dialog.getByRole("button", { name: "Discard changes" }).click();

@@ -87,6 +87,18 @@ export async function rowMenu(page: Page, title: string, ...entries: string[]): 
   for (const entry of entries) await page.getByRole("menu").getByRole("menuitem", { name: entry, exact: true }).click();
 }
 
+/**
+ * Sets a date or time through its picker (Pickers.tsx): opens the pill named `name`, types `value`
+ * ("2026-11-02", "14:30") into the picker's field and presses Return.
+ */
+export async function pick(scope: Locator, name: string, value: string): Promise<void> {
+  await scope.getByRole("button", { name: new RegExp(`^${escape(name)}:`) }).click();
+  const field = scope.getByRole("textbox", { name: /^Type a (date|time)$/ });
+  await field.fill(value);
+  await field.press("Enter");
+  await expect(field).toHaveCount(0);
+}
+
 /** Long-press drag with a real pointer: hold still past the lift delay, then move and let go. */
 export async function longPressDrag(page: Page, from: Locator, to: Locator, share: number): Promise<void> {
   const a = (await from.boundingBox())!;

@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react";
+import { ShellActions } from "../Shell";
 import { useState } from "react";
 import { Navigate } from "react-router";
 import { useMediaQuery, WIDE } from "../components/motion";
@@ -18,6 +19,7 @@ export default function ListsPage() {
   return (
     <div className="page">
       <div className="nav-bar">
+        <ShellActions />
         <button type="button" className="button--plain button--icon nav-bar__end" onClick={() => setCreating(true)}>
           <Plus size={20} aria-hidden="true" />
           New List

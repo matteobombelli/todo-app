@@ -40,8 +40,11 @@ export function formatShortWeekday(date: string): string {
   return shortWeekday.format(utc(date));
 }
 
-export function formatDayMonth(date: string): string {
-  return weekdayDay.format(utc(date));
+/** A range of days: "Oct 18 – 24", "Oct 28 – Nov 3", with the year when it is not this year's. */
+export function formatDayRange(from: string, to: string, today: string): string {
+  const year = to.slice(0, 4) === today.slice(0, 4) ? "" : `, ${to.slice(0, 4)}`;
+  const end = from.slice(0, 7) === to.slice(0, 7) ? String(Number(to.slice(8))) : monthDay.format(utc(to));
+  return `${monthDay.format(utc(from))} – ${end}${year}`;
 }
 
 /** "Oct 6", with the year when it is not this year's. */

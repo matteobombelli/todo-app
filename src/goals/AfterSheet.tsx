@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Goal } from "../../shared/entities";
+import { TextArea } from "../components/Fields";
 import { Modal, useModal } from "../components/Modal";
 import { store } from "../data/instance";
 
@@ -24,36 +25,53 @@ export function AfterSheet({ goal, onClose }: { goal: Goal; onClose: () => void 
     <Modal {...modal} variant="dialog" title="Record the After">
       <div className="form">
         {goal.before_note && (
-          <div className="field">
-            <span className="field__label">Before</span>
-            <p className="before-quote">{goal.before_note}</p>
-          </div>
+          <section>
+            <h3 className="group-label">Before</h3>
+            <p className="before-quote group group--padded">{goal.before_note}</p>
+          </section>
         )}
         {goal.metric_label !== null && (
-          <label className="field">
-            <span className="field__label">
+          <section>
+            <h3 className="group-label">
               {goal.metric_label}: started at {goal.metric_baseline}
               {unit}, aimed for {goal.metric_target}
               {unit}
-            </span>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="any"
-              autoFocus
-              value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
-                setError(null);
-              }}
-            />
-          </label>
+            </h3>
+            <div className="group">
+              <label className="group__row">
+                <span className="group__name">Ended at</span>
+                <input
+                  className="group__inline"
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  autoFocus
+                  aria-label={`${goal.metric_label} now`}
+                  value={value}
+                  onChange={(e) => {
+                    setValue(e.target.value);
+                    setError(null);
+                  }}
+                />
+              </label>
+            </div>
+          </section>
         )}
-        <label className="field">
-          <span className="field__label">Where are you now?</span>
-          <textarea rows={4} maxLength={2000} value={note} autoFocus={goal.metric_label === null} onChange={(e) => setNote(e.target.value)} />
-          <span className="field__hint">Closing the goal seals it: its score and entries can't change after this.</span>
-        </label>
+        <section>
+          <h3 className="group-label">Where are you now?</h3>
+          <div className="group">
+            <TextArea
+              className="group__input"
+              aria-label="Where are you now?"
+              rows={4}
+              maxLength={2000}
+              value={note}
+              autoFocus={goal.metric_label === null}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+          <span className="group-hint">Closing the goal seals it: its score and entries can't change after this.</span>
+        </section>
         {error && (
           <p className="form__error" role="alert">
             {error}

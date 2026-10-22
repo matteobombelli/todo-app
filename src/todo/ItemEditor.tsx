@@ -1,8 +1,9 @@
-import { X } from "lucide-react";
-import { useId, useMemo, useState, type FormEvent, type MouseEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import type { Item } from "../../shared/entities";
 import { newId } from "../../shared/ids";
+import { TextArea } from "../components/Fields";
 import { Modal, useModal } from "../components/Modal";
+import { PickerRow, PickerScope } from "../components/Pickers";
 import { followStart, RepeatFields, repeatFromRRule, repeatProblem, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
 import { localNow, useData, useLists } from "../data/hooks";
 import { store } from "../data/instance";
@@ -32,7 +33,6 @@ export function ItemEditor({
   const [repeat, setRepeat] = useState(() => repeatFromRRule(item?.rrule ?? null, item?.due_date ?? initial?.due_date ?? localNow().date));
   const [listId, setListId] = useState(item?.list_id ?? initial?.list_id ?? lists[0]?.id ?? "");
   const [modal, close] = useModal(onClose);
-  const fieldId = useId();
   const [error, setError] = useState<string | null>(null);
   // The form as it opened, so saving writes only what the user changed (see save).
   const [opened] = useState(() => ({ title, notes, dueDate, dueTime, rrule: item?.rrule ? repeatToRRule(repeat) : null, listId }));
@@ -84,13 +84,6 @@ export function ItemEditor({
     if (Object.keys(patch).length) void store.upsert("items", { ...current, ...patch });
   }
 
-  // A clear button goes once its field is empty: from the keyboard (no pointer, so no click
-  // detail), focus moves to the field rather than off the page. A tap leaves it, so iOS doesn't
-  // reopen the picker.
-  function refocus(e: MouseEvent<HTMLButtonElement>) {
-    if (e.detail === 0) (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
-  }
-
   function done() {
     const problem = canRepeat ? repeatProblem(repeat, dueDate) : null;
     setError(problem);
@@ -111,73 +104,56 @@ export function ItemEditor({
   }
 
   return (
-    <Modal {...modal} onClose={done} done title={item ? "Details" : "New to-do"}>
+    <Modal {...modal} onClose={done} done title={item ? "Details" : "New To-do"}>
       <form className="form" onSubmit={onSubmit}>
-        <label className="field">
-          <span className="field__label">Title</span>
-          <input autoFocus={!item} maxLength={500} enterKeyHint="done" value={title} onChange={(e) => setTitle(e.target.value)} />
-        </label>
-        <label className="field">
-          <span className="field__label">Notes</span>
-          <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </label>
-        {/* Clear buttons, since a native date or time field can't be emptied everywhere (iOS). */}
-        <div className="field-row">
-          <div className="field">
-            <label className="field__label" htmlFor={`${fieldId}-date`}>
-              Due date
-            </label>
-            <div className="field__control">
-              <input
-                id={`${fieldId}-date`}
-                type="date"
-                value={dueDate}
-                onChange={(e) => {
-                  setRepeat((r) => followStart(r, dueDate, e.target.value));
-                  setDueDate(e.target.value);
-                }}
-              />
-              {dueDate && (
-                <button
-                  type="button"
-                  className="button--plain field__clear"
-                  aria-label="Clear date"
-                  onClick={(e) => {
-                    setDueDate("");
-                    setDueTime("");
-                    refocus(e);
-                  }}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="field">
-            <label className="field__label" htmlFor={`${fieldId}-time`}>
-              Time (optional)
-            </label>
-            <div className="field__control">
-              <input id={`${fieldId}-time`} type="time" value={dueTime} disabled={!dueDate} onChange={(e) => setDueTime(e.target.value)} />
-              {dueDate && dueTime && (
-                <button
-                  type="button"
-                  className="button--plain field__clear"
-                  aria-label="Clear time"
-                  onClick={(e) => {
-                    setDueTime("");
-                    refocus(e);
-                  }}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="group">
+          <input
+            className="group__input group__input--title"
+            aria-label="Title"
+            placeholder="Title"
+            autoFocus={!item}
+            maxLength={500}
+            enterKeyHint="done"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <TextArea className="group__input" aria-label="Notes" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
-        {canRepeat && (
-          <RepeatFields repeat={repeat} startDate={dueDate} onChange={(patch: Partial<RepeatForm>) => setRepeat((r) => ({ ...r, ...patch }))} />
-        )}
+        <PickerScope>
+          <div className="group">
+            <PickerRow
+              label="Date"
+              picks={[
+                {
+                  kind: "date",
+                  name: "Due date",
+                  value: dueDate,
+                  placeholder: "Add date",
+                  onChange: (date) => {
+                    setRepeat((r) => followStart(r, dueDate, date));
+                    setDueDate(date);
+                  },
+                },
+              ]}
+              clearLabel="Clear date"
+              onClear={() => {
+                setDueDate("");
+                setDueTime("");
+              }}
+            />
+            {dueDate && (
+              <PickerRow
+                label="Time"
+                picks={[{ kind: "time", name: "Time", value: dueTime, placeholder: "Add time", onChange: setDueTime }]}
+                clearLabel="Clear time"
+                onClear={() => setDueTime("")}
+              />
+            )}
+            {canRepeat && (
+              <RepeatFields repeat={repeat} startDate={dueDate} onChange={(patch: Partial<RepeatForm>) => setRepeat((r) => ({ ...r, ...patch }))} />
+            )}
+          </div>
+        </PickerScope>
         {error && (
           <div className="form__error" role="alert">
             <p>{error}</p>
@@ -187,20 +163,22 @@ export function ItemEditor({
             </button>
           </div>
         )}
-        <label className="field">
-          <span className="field__label">List</span>
-          <select value={listId} onChange={(e) => setListId(e.target.value)}>
-            {lists.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="group">
+          <label className="group__row">
+            <span className="group__name">List</span>
+            <select value={listId} onChange={(e) => setListId(e.target.value)}>
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         {item && (
-          <div className="form__actions">
-            <button type="button" className="button--danger form__actions-start" onClick={onDelete}>
-              Delete
+          <div className="group">
+            <button type="button" className="group__button group__button--danger" onClick={onDelete}>
+              Delete To-do
             </button>
           </div>
         )}

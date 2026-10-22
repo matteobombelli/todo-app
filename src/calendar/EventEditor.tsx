@@ -1,11 +1,12 @@
 import { useRef, useState, type FormEvent } from "react";
-import { addDays, daysBetween, isDate, toMinutes } from "../../shared/dates";
+import { addDays, daysBetween, isDate, isTime, toMinutes } from "../../shared/dates";
 import type { PaletteKey } from "../../shared/palette";
 import type { Occurrence } from "../../shared/recurrence";
 import { ColorPicker } from "../components/ColorPicker";
 import { followStart, RepeatFields, repeatFromRRule, repeatToRRule, type RepeatForm } from "../components/RepeatFields";
-import { Checkbox } from "../components/Checkbox";
+import { Switch, TextArea } from "../components/Fields";
 import { Modal, useModal } from "../components/Modal";
+import { PickerRow, PickerScope } from "../components/Pickers";
 import { store } from "../data/instance";
 import {
   deleteEvent,
@@ -14,6 +15,27 @@ import {
   type EventForm,
   type Scope,
 } from "./eventActions";
+
+/** The date and time `minutes` after `date` at `time`. */
+function shift(date: string, time: string, minutes: number): { date: string; time: string } {
+  const total = toMinutes(time) + minutes;
+  const days = Math.floor(total / 1440);
+  const m = total - days * 1440;
+  return { date: addDays(date, days), time: `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}` };
+}
+
+/** Minutes from the event's start to its end (negative when it ends first). */
+function duration(f: EventForm): number {
+  return daysBetween(f.start_date, f.end_date) * 1440 + toMinutes(f.end_time) - toMinutes(f.start_time);
+}
+
+const DURATIONS = [15, 30, 45, 60, 90, 120];
+
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = minutes / 60;
+  return `${Number.isInteger(hours) ? hours : `${Math.floor(hours)}½`} hr`;
+}
 
 /** HH:MM an hour after `time`, stopping at the end of the day. */
 function hourLater(time: string): string {
@@ -112,6 +134,17 @@ export function EventEditor({
     });
   }
 
+  function setStartTime(value: string) {
+    // Keep the duration when the start moves, as long as the event was the right way round.
+    setForm((f) => {
+      if (!isDate(f.start_date) || !isTime(f.start_time) || !isTime(f.end_time) || !isTime(value)) return { ...f, start_time: value };
+      const length = duration(f);
+      if (length < 0) return { ...f, start_time: value };
+      const end = shift(f.start_date, value, length);
+      return { ...f, start_time: value, end_date: end.date, end_time: end.time };
+    });
+  }
+
   async function run(action: "save" | "delete", scope: Scope) {
     if (running.current) return;
     running.current = true;
@@ -150,53 +183,73 @@ export function EventEditor({
   }
 
   const { repeat } = form;
+  const length = isDate(form.start_date) && isDate(form.end_date) && isTime(form.start_time) && isTime(form.end_time) ? duration(form) : null;
+  const durations = (closePanel: () => void) => (
+    <div className="quick-row" role="group" aria-label="Duration">
+      {DURATIONS.map((m) => (
+        <button
+          key={m}
+          type="button"
+          className="quick"
+          aria-pressed={m === length}
+          onClick={() => {
+            const end = shift(form.start_date, form.start_time, m);
+            setForm((f) => ({ ...f, end_date: end.date, end_time: end.time }));
+            closePanel();
+          }}
+        >
+          {formatDuration(m)}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <>
-      <Modal {...modal} onClose={done} done title={occurrence ? "Edit event" : "New event"}>
+      <Modal {...modal} onClose={done} done title={occurrence ? "Edit Event" : "New Event"}>
         <form className="form" onSubmit={onSubmit}>
-          <label className="field">
-            <span className="field__label">Title</span>
-            <input autoFocus={!occurrence} maxLength={500} enterKeyHint="done" value={form.title} onChange={(e) => set("title", e.target.value)} />
-          </label>
-          <label className="check-field">
-            <Checkbox checked={form.all_day} onChange={(v) => set("all_day", v)} />
-            All day
-          </label>
-          <div className="field-row">
-            <label className="field">
-              <span className="field__label">Starts</span>
-              <input type="date" required value={form.start_date} onChange={(e) => setStartDate(e.target.value)} />
-            </label>
-            {!form.all_day && (
-              <label className="field">
-                <span className="field__label">At</span>
-                <input type="time" required value={form.start_time} onChange={(e) => set("start_time", e.target.value)} />
-              </label>
-            )}
+          <div className="group">
+            <input
+              className="group__input group__input--title"
+              aria-label="Title"
+              placeholder="Title"
+              autoFocus={!occurrence}
+              maxLength={500}
+              enterKeyHint="done"
+              value={form.title}
+              onChange={(e) => set("title", e.target.value)}
+            />
           </div>
-          <div className="field-row">
-            <label className="field">
-              <span className="field__label">Ends</span>
-              <input type="date" required value={form.end_date} onChange={(e) => set("end_date", e.target.value)} />
-            </label>
-            {!form.all_day && (
-              <label className="field">
-                <span className="field__label">At</span>
-                <input type="time" required value={form.end_time} onChange={(e) => set("end_time", e.target.value)} />
+          <PickerScope>
+            <div className="group">
+              <label className="group__row">
+                <span className="group__name">All-day</span>
+                <Switch checked={form.all_day} label="All day" onChange={(v) => set("all_day", v)} />
               </label>
-            )}
-          </div>
-
-          <RepeatFields repeat={repeat} startDate={form.start_date} onChange={setRepeat} />
-
-          <div className="field">
-            <span className="field__label">Colour</span>
+              <PickerRow
+                label="Starts"
+                picks={[
+                  { kind: "date", name: "Start date", value: form.start_date, onChange: setStartDate },
+                  ...(form.all_day ? [] : [{ kind: "time" as const, name: "Start time", value: form.start_time, onChange: setStartTime }]),
+                ]}
+              />
+              <PickerRow
+                label="Ends"
+                picks={[
+                  { kind: "date", name: "End date", value: form.end_date, onChange: (v) => set("end_date", v) },
+                  ...(form.all_day
+                    ? []
+                    : [{ kind: "time" as const, name: "End time", value: form.end_time, onChange: (v: string) => set("end_time", v), extra: durations }]),
+                ]}
+              />
+              <RepeatFields repeat={repeat} startDate={form.start_date} onChange={setRepeat} />
+            </div>
+          </PickerScope>
+          <div className="group group--padded">
             <ColorPicker value={form.color} onChange={(c) => set("color", c)} />
           </div>
-          <label className="field">
-            <span className="field__label">Notes</span>
-            <textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
-          </label>
+          <div className="group">
+            <TextArea className="group__input" aria-label="Notes" placeholder="Notes" rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+          </div>
           {error && (
             <div className="form__error" role="alert">
               <p>{error}</p>
@@ -207,9 +260,9 @@ export function EventEditor({
             </div>
           )}
           {occurrence && (
-            <div className="form__actions">
-              <button type="button" className="button--danger form__actions-start" onClick={onDelete}>
-                Delete
+            <div className="group">
+              <button type="button" className="group__button group__button--danger" onClick={onDelete}>
+                Delete Event
               </button>
             </div>
           )}

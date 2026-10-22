@@ -48,6 +48,8 @@ test.describe("accounts", () => {
     const first = await makeUser("First");
     await page.goto(`/todo/${first.list.id}`);
     await expect.poll(() => openTitles(page)).toEqual(["First secret"]);
+    // On a phone Settings is on the top-level pages.
+    await page.getByRole("link", { name: "Calendar" }).click();
     await page.getByRole("button", { name: "Settings" }).first().click();
     await page.getByRole("button", { name: "Log out" }).click();
     await expect(page).toHaveURL(/\/login/);

@@ -1,5 +1,5 @@
 import { CalendarDays, CloudOff, ListTodo, Plus, RefreshCw, Settings, Target, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { useAuth } from "./auth/AuthProvider";
 import { IconButton } from "./components/IconButton";
@@ -48,6 +48,22 @@ function Tabs({ className }: { className: string }) {
         <span>Goals</span>
       </NavLink>
     </nav>
+  );
+}
+
+const OpenSettings = createContext<() => void>(() => undefined);
+
+/**
+ * Sync status and Settings for a top-level page's navigation bar on phones, where there is no header
+ * (wider screens have them in the header or sidebar).
+ */
+export function ShellActions() {
+  const openSettings = useContext(OpenSettings);
+  return (
+    <div className="shell-actions">
+      <IconButton icon={Settings} label="Settings" onClick={openSettings} />
+      <SyncIndicator />
+    </div>
   );
 }
 
@@ -110,22 +126,24 @@ export default function Shell() {
   }, [userId]);
 
   return (
-    <div className="shell">
-      {loaded && <Sidebar onSettings={() => setSettingsOpen(true)} />}
-      <div className="shell__content">
-        <header className="app-header">
-          <span className="app-header__brand">Todo</span>
-          <Tabs className="tabs tabs--top" />
-          <div className="app-header__end">
-            <SyncIndicator />
-            <IconButton icon={Settings} label="Settings" onClick={() => setSettingsOpen(true)} />
-          </div>
-        </header>
-        <main className="shell__main">{loaded ? <Outlet /> : <Spinner />}</main>
-        <Tabs className="tabs tabs--bottom" />
+    <OpenSettings.Provider value={() => setSettingsOpen(true)}>
+      <div className="shell">
+        {loaded && <Sidebar onSettings={() => setSettingsOpen(true)} />}
+        <div className="shell__content">
+          <header className="app-header">
+            <span className="app-header__brand">Todo</span>
+            <Tabs className="tabs tabs--top" />
+            <div className="app-header__end">
+              <SyncIndicator />
+              <IconButton icon={Settings} label="Settings" onClick={() => setSettingsOpen(true)} />
+            </div>
+          </header>
+          <main className="shell__main">{loaded ? <Outlet /> : <Spinner />}</main>
+          <Tabs className="tabs tabs--bottom" />
+        </div>
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <UndoToast />
       </div>
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <UndoToast />
-    </div>
+    </OpenSettings.Provider>
   );
 }

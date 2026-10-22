@@ -6,6 +6,8 @@ import { goalProblem, periodLength, requiredShare, stampGoal } from "../../share
 import { newId } from "../../shared/ids";
 import type { PaletteKey } from "../../shared/palette";
 import { ColorPicker } from "../components/ColorPicker";
+import { Switch, TextArea } from "../components/Fields";
+import { PickerRow, PickerScope } from "../components/Pickers";
 import { Modal, useModal } from "../components/Modal";
 import { useGoalToday } from "../data/hooks";
 import { store } from "../data/instance";
@@ -72,17 +74,19 @@ function toFields(form: Form, base: Goal | null, id: string, status: Goal["statu
   };
 }
 
-function Letter({ letter, label, children }: { letter: string; label: string; children: ReactNode }) {
+/** One SMART answer: its letter and question over a group of fields, with an optional hint below. */
+function Letter({ letter, label, hint, children }: { letter: string; label: string; hint?: ReactNode; children: ReactNode }) {
   return (
-    <div className="smart-field">
-      <span className="smart-field__letter" aria-hidden="true">
-        {letter}
-      </span>
-      <div className="field">
-        <span className="field__label">{label}</span>
-        {children}
-      </div>
-    </div>
+    <section className="smart-field">
+      <h3 className="group-label">
+        <span className="smart-field__letter" aria-hidden="true">
+          {letter}
+        </span>
+        {label}
+      </h3>
+      <div className="group">{children}</div>
+      {hint}
+    </section>
   );
 }
 
@@ -149,74 +153,89 @@ export function GoalEditor({ goal, onClose }: { goal: Goal | null; onClose: () =
     <Modal {...modal} onClose={done} done title={goal ? (committed ? "Edit Goal" : "Edit Draft") : "New Goal"}>
       {step === "smart" ? (
         <form className="form" onSubmit={next}>
-          <label className="field">
-            <span className="field__label">Title</span>
-            <input autoFocus={!goal} maxLength={200} value={form.title} placeholder="Run 3x a week" onChange={(e) => set("title", e.target.value)} />
-          </label>
-          <div className="field">
-            <span className="field__label">Colour</span>
-            <ColorPicker value={form.color} onChange={(c) => set("color", c)} />
+          <div className="group">
+            <input
+              className="group__input group__input--title"
+              aria-label="Title"
+              placeholder="Title, e.g. Run 3x a week"
+              autoFocus={!goal}
+              maxLength={200}
+              value={form.title}
+              onChange={(e) => set("title", e.target.value)}
+            />
+            <div className="group__row group__row--block">
+              <ColorPicker value={form.color} onChange={(c) => set("color", c)} />
+            </div>
           </div>
           <Letter letter="S" label="Specific: what exactly will you do?">
-            <textarea rows={2} maxLength={2000} value={form.specific} placeholder="Run at least 3 km, three times a week" onChange={(e) => set("specific", e.target.value)} />
+            <TextArea className="group__input" aria-label="Specific" maxLength={2000} value={form.specific} placeholder="e.g. Run at least 3 km, three times a week" onChange={(e) => set("specific", e.target.value)} />
           </Letter>
-          <Letter letter="M" label="Measurable: days of effort to log">
-            <input type="number" inputMode="decimal" min={0.5} step={0.5} max={days} className="input--narrow" aria-label="Days of effort" value={form.target_days} onChange={(e) => set("target_days", e.target.value)} />
-            <label className="check-field">
-              <input type="checkbox" checked={form.metric} onChange={(e) => set("metric", e.target.checked)} />
-              <span>And a number to move</span>
+          <Letter letter="M" label="Measurable: how will you count it?">
+            <label className="group__row">
+              <span className="group__name">Days of effort</span>
+              <input type="number" inputMode="decimal" min={0.5} step={0.5} max={days} className="group__inline" aria-label="Days of effort" value={form.target_days} onChange={(e) => set("target_days", e.target.value)} />
+            </label>
+            <label className="group__row">
+              <span className="group__name">Track a number too</span>
+              <Switch checked={form.metric} label="And a number to move" onChange={(v) => set("metric", v)} />
             </label>
             {form.metric && (
-              <div className="field-row">
-                <label className="field">
-                  <span className="field__label">What</span>
-                  <input maxLength={120} value={form.metric_label} placeholder="5k time" onChange={(e) => set("metric_label", e.target.value)} />
+              <>
+                <label className="group__row">
+                  <span className="group__name">What</span>
+                  <input className="group__inline" maxLength={120} value={form.metric_label} placeholder="5k time" onChange={(e) => set("metric_label", e.target.value)} />
                 </label>
-                <label className="field">
-                  <span className="field__label">Unit</span>
-                  <input maxLength={40} value={form.metric_unit} placeholder="min" onChange={(e) => set("metric_unit", e.target.value)} />
+                <label className="group__row">
+                  <span className="group__name">Unit</span>
+                  <input className="group__inline" maxLength={40} value={form.metric_unit} placeholder="min" onChange={(e) => set("metric_unit", e.target.value)} />
                 </label>
-                <label className="field">
-                  <span className="field__label">Now</span>
-                  <input type="number" inputMode="decimal" step="any" value={form.metric_baseline} onChange={(e) => set("metric_baseline", e.target.value)} />
+                <label className="group__row">
+                  <span className="group__name">Now</span>
+                  <input className="group__inline" type="number" inputMode="decimal" step="any" placeholder="0" value={form.metric_baseline} onChange={(e) => set("metric_baseline", e.target.value)} />
                 </label>
-                <label className="field">
-                  <span className="field__label">Target</span>
-                  <input type="number" inputMode="decimal" step="any" value={form.metric_target} onChange={(e) => set("metric_target", e.target.value)} />
+                <label className="group__row">
+                  <span className="group__name">Target</span>
+                  <input className="group__inline" type="number" inputMode="decimal" step="any" placeholder="0" value={form.metric_target} onChange={(e) => set("metric_target", e.target.value)} />
                 </label>
-              </div>
+              </>
             )}
           </Letter>
-          <Letter letter="A" label="Achievable: why can you do this?">
-            <textarea rows={2} maxLength={2000} value={form.achievable} placeholder="Ran twice a week all summer" onChange={(e) => set("achievable", e.target.value)} />
-            {share !== null && (
-              <span className={`field__hint${share > 0.85 ? " field__hint--warn" : ""}`}>
-                Needs {Math.round(share * 100)}% of days, about {Math.round(share * 70) / 10} a week
-                {share > 0.85 ? ". That leaves little room for a bad week." : ""}
-              </span>
-            )}
+          <Letter
+            letter="A"
+            label="Achievable: why can you do this?"
+            hint={
+              share !== null && (
+                <span className={`group-hint${share > 0.85 ? " group-hint--warn" : ""}`}>
+                  Needs {Math.round(share * 100)}% of days, about {Math.round(share * 70) / 10} a week
+                  {share > 0.85 ? ". That leaves little room for a bad week." : ""}
+                </span>
+              )
+            }
+          >
+            <TextArea className="group__input" aria-label="Achievable" maxLength={2000} value={form.achievable} placeholder="e.g. Ran twice a week all summer" onChange={(e) => set("achievable", e.target.value)} />
           </Letter>
           <Letter letter="R" label="Relevant: why does it matter?">
-            <textarea rows={2} maxLength={2000} value={form.relevant} placeholder="Half-marathon in the spring" onChange={(e) => set("relevant", e.target.value)} />
+            <TextArea className="group__input" aria-label="Relevant" maxLength={2000} value={form.relevant} placeholder="e.g. Half-marathon in the spring" onChange={(e) => set("relevant", e.target.value)} />
           </Letter>
-          <Letter letter="T" label="Time-bound">
-            <div className="field-row">
-              <label className="field">
-                <span className="field__label">Starts</span>
-                <input type="date" required value={form.start_date} min={committed ? undefined : today} onChange={(e) => set("start_date", e.target.value)} />
-              </label>
-              <label className="field">
-                <span className="field__label">Ends</span>
-                <input type="date" required value={form.end_date} min={form.start_date} onChange={(e) => set("end_date", e.target.value)} />
-              </label>
-            </div>
-            {days > 0 && <span className="field__hint">{days} days</span>}
+          <Letter letter="T" label="Time-bound" hint={days > 0 && <span className="group-hint">{days} days</span>}>
+            <PickerScope>
+              <PickerRow
+                label="Starts"
+                picks={[{ kind: "date", name: "Start date", value: form.start_date, min: committed ? undefined : today, onChange: (v) => set("start_date", v) }]}
+              />
+              <PickerRow
+                label="Ends"
+                picks={[{ kind: "date", name: "End date", value: form.end_date, min: form.start_date, onChange: (v) => set("end_date", v) }]}
+              />
+            </PickerScope>
           </Letter>
           {committed && (
-            <label className="field">
-              <span className="field__label">Where you started</span>
-              <textarea rows={3} maxLength={2000} value={form.before_note} onChange={(e) => set("before_note", e.target.value)} />
-            </label>
+            <section>
+              <h3 className="group-label">Where you started</h3>
+              <div className="group">
+                <TextArea className="group__input" aria-label="Where you started" rows={3} maxLength={2000} value={form.before_note} onChange={(e) => set("before_note", e.target.value)} />
+              </div>
+            </section>
           )}
           {error && <ErrorLine error={error} onDiscard={close} />}
           {!committed && (
@@ -235,18 +254,22 @@ export function GoalEditor({ goal, onClose }: { goal: Goal | null; onClose: () =
               {form.metric_target}{form.metric_unit && ` ${form.metric_unit}`}
             </p>
           )}
-          <label className="field">
-            <span className="field__label">Where are you now?</span>
-            <textarea
-              autoFocus
-              rows={4}
-              maxLength={2000}
-              value={form.before_note}
-              placeholder="Out of breath by km 3. Running alone, no plan."
-              onChange={(e) => set("before_note", e.target.value)}
-            />
-            <span className="field__hint">Your "after" opens in the last week and sits next to this.</span>
-          </label>
+          <section>
+            <h3 className="group-label">Where are you now?</h3>
+            <div className="group">
+              <TextArea
+                className="group__input"
+                aria-label="Where are you now?"
+                autoFocus
+                rows={4}
+                maxLength={2000}
+                value={form.before_note}
+                placeholder="e.g. Out of breath by km 3. Running alone, no plan."
+                onChange={(e) => set("before_note", e.target.value)}
+              />
+            </div>
+            <span className="group-hint">Your "after" opens in the last week and sits next to this.</span>
+          </section>
           <div className="commit-warning" role="note">
             <strong>
               <Lock size={15} aria-hidden="true" /> Committing locks this goal

@@ -51,27 +51,34 @@ export function ListEditor({
   }
 
   return (
-    <Modal {...modal} onClose={done} done title={list ? "Edit list" : "New list"}>
+    <Modal {...modal} onClose={done} done title={list ? "Edit List" : "New List"}>
       <form className="form" onSubmit={onSubmit}>
-        <label className="field">
-          <span className="field__label">Name</span>
-          <input autoFocus={!list} maxLength={120} enterKeyHint="done" value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <div className="field">
-          <span className="field__label">Colour</span>
-          <ColorPicker value={color} onChange={setColor} />
+        <div className="group">
+          <input
+            className="group__input group__input--title"
+            aria-label="Name"
+            placeholder="List Name"
+            autoFocus={!list}
+            maxLength={120}
+            enterKeyHint="done"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div className="group__row group__row--block">
+            <ColorPicker value={color} onChange={setColor} />
+          </div>
         </div>
         {list && (
-          <div className="form__actions">
+          <div className="group">
             <button
               type="button"
-              className="button--danger form__actions-start"
+              className="group__button group__button--danger"
               onClick={() => {
                 deleting.current = true;
                 close();
               }}
             >
-              Delete
+              Delete List
             </button>
           </div>
         )}

@@ -41,8 +41,8 @@ test.describe("long-press drag", () => {
     await expect.poll(() => openTitles(page)).toEqual(["D1", "D2", "E1"]);
     await longPressDrag(page, row(page, "D2"), row(page, "D1"), 0.1);
     await expect.poll(() => openTitles(page)).toEqual(["D2", "D1", "E1"]);
-    // E1 dropped above D2's top edge: nothing to reorder there, so it nests (the only valid drop).
-    await longPressDrag(page, row(page, "E1"), row(page, "D2"), 0.05);
+    // E1 dropped at D2's top edge: nothing to reorder there, so it nests (the only valid drop).
+    await longPressDrag(page, row(page, "E1"), row(page, "D2"), 0.15);
     await expect.poll(() => openTitles(page)).toEqual(["D2", "E1", "D1"]);
     void account;
   });

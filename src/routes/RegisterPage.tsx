@@ -34,33 +34,38 @@ export default function RegisterPage() {
     <main className="page page--centre">
       <form className="card card--auth" onSubmit={onSubmit}>
         <h1>Register</h1>
-        <input
-          type="email"
-          placeholder="Email"
-          aria-label="Email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="Password (8+ characters)"
-          aria-label="Password"
-          autoComplete="new-password"
-          required
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Invite code"
-          aria-label="Invite code"
-          required
-          value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value)}
-        />
+        <div className="group">
+          <input
+            className="group__input"
+            type="email"
+            placeholder="Email"
+            aria-label="Email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            className="group__input"
+            type="password"
+            placeholder="Password (8+ characters)"
+            aria-label="Password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <input
+            className="group__input"
+            type="text"
+            placeholder="Invite code"
+            aria-label="Invite code"
+            required
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+          />
+        </div>
         {error && <p className="form__error" role="alert">{error}</p>}
         <button type="submit" className="button--primary button--icon" disabled={busy}>
           {busy && <Spinner inline />}
