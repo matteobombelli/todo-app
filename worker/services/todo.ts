@@ -6,6 +6,8 @@ import {
   CHILDREN,
   EventExceptionFields,
   EventFields,
+  GoalEntryFields,
+  GoalFields,
   ItemFields,
   ListFields,
   type CalendarEvent,
@@ -13,10 +15,13 @@ import {
   type EntityRecord,
   type Fields,
   type EventException,
+  type Goal,
+  type GoalEntry,
   type Item,
   type List,
   type Mutation,
 } from "../../shared/entities";
+import { countedEntries, daysLogged, goalPhase, isLocked, locksAt, pace, scorePercent } from "../../shared/goals";
 import { newId } from "../../shared/ids";
 import { cascadeToSubtasks, compareItems, completeItem, isOverdue, type Now } from "../../shared/items";
 import type { PaletteKey } from "../../shared/palette";
@@ -340,6 +345,140 @@ export async function deleteItems(s: Scope, ids: string[]): Promise<Item[]> {
   })) as Item[];
 }
 
+// Goals
+
+function matchGoal(goals: Goal[], ref: string): Goal {
+  const byId = goals.find((g) => g.id === ref);
+  if (byId) return byId;
+  const needle = ref.trim().toLowerCase();
+  const named = goals.filter((g) => g.title.toLowerCase() === needle);
+  if (named.length > 1) throw new ToolError(`Several goals are titled "${ref}": ${named.map((g) => g.id).join(", ")}. Pass the id instead.`);
+  if (!named[0]) {
+    const titles = goals.map((g) => `"${g.title}"`).join(", ") || "none";
+    throw new ToolError(`No goal titled or with id "${ref}". Goals: ${titles}`);
+  }
+  return named[0];
+}
+
+export function summarizeGoal(goal: Goal, entries: GoalEntry[], today: string) {
+  const logged = daysLogged(goal, entries);
+  return {
+    id: goal.id,
+    title: goal.title,
+    phase: goalPhase(goal, today),
+    start_date: goal.start_date,
+    end_date: goal.end_date,
+    target_days: goal.target_days,
+    days_logged: logged,
+    score_percent: scorePercent(logged, goal.target_days),
+    pace_days: Math.round(pace(logged, goal, today) * 10) / 10,
+    logged_today: countedEntries(goal, entries).find((e) => e.date === today)?.amount ?? 0,
+  };
+}
+
+export async function listGoals(s: Scope) {
+  const now = await userNow(s);
+  const [goals, entries] = await Promise.all([listRecords(s.env.DB, s.userId, "goals"), listRecords(s.env.DB, s.userId, "goal_entries")]);
+  return {
+    today: now.date,
+    goals: goals.sort((a, b) => a.end_date.localeCompare(b.end_date)).map((g) => summarizeGoal(g, entries, now.date)),
+  };
+}
+
+export async function getGoal(s: Scope, ref: string) {
+  const now = await userNow(s);
+  const [goals, entries] = await Promise.all([listRecords(s.env.DB, s.userId, "goals"), listRecords(s.env.DB, s.userId, "goal_entries")]);
+  const goal = matchGoal(goals, ref);
+  const lock = locksAt(goal);
+  return {
+    ...summarizeGoal(goal, entries, now.date),
+    color: goal.color,
+    specific: goal.specific,
+    achievable: goal.achievable,
+    relevant: goal.relevant,
+    ...(goal.metric_label !== null
+      ? { metric: { label: goal.metric_label, unit: goal.metric_unit, before: goal.metric_baseline, target: goal.metric_target, after: goal.after_value } }
+      : {}),
+    before_note: goal.before_note,
+    after_note: goal.after_note,
+    locked: isLocked(goal, Date.now()),
+    ...(lock !== null ? { locks_at: new Date(lock).toISOString() } : {}),
+    entries: countedEntries(goal, entries)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((e) => ({ date: e.date, amount: e.amount, ...(e.note ? { note: e.note } : {}) })),
+  };
+}
+
+export interface GoalInput {
+  title: string;
+  color?: PaletteKey;
+  specific?: string;
+  achievable?: string;
+  relevant?: string;
+  start_date: string;
+  end_date: string;
+  target_days: number;
+  metric?: { label: string; unit?: string; before: number; target: number };
+  before_note?: string;
+}
+
+/** Creates a goal as a draft: committing to it is left to the user, in the app. */
+export async function createGoal(s: Scope, input: GoalInput): Promise<Goal> {
+  const [goal] = await runBatch(s, ["goals"], [input], (b, i) =>
+    b.upsert(
+      "goals",
+      check(GoalFields, {
+        id: newId(),
+        title: i.title,
+        color: i.color ?? "green",
+        specific: i.specific ?? "",
+        achievable: i.achievable ?? "",
+        relevant: i.relevant ?? "",
+        start_date: i.start_date,
+        end_date: i.end_date,
+        target_days: i.target_days,
+        metric_label: i.metric?.label ?? null,
+        metric_unit: i.metric?.unit ?? null,
+        metric_baseline: i.metric?.before ?? null,
+        metric_target: i.metric?.target ?? null,
+        before_note: i.before_note ?? "",
+        after_value: null,
+        after_note: null,
+        status: "draft",
+        committed_at: null,
+        closed_at: null,
+      }),
+    ),
+  );
+  return goal as Goal;
+}
+
+export interface EffortInput {
+  goal: string;
+  amount: 0 | 0.5 | 1;
+  day?: "today" | "yesterday";
+  note?: string;
+}
+
+/** Logs a day's effort on a goal; 0 takes back what was logged that day. */
+export async function logGoalEffort(s: Scope, inputs: EffortInput[]) {
+  const now = await userNow(s);
+  return runBatch(s, ["goals", "goal_entries"], inputs, (b, input) => {
+    const goal = matchGoal(b.all("goals"), input.goal);
+    const date = input.day === "yesterday" ? addDays(now.date, -1) : now.date;
+    const existing = b.all("goal_entries").find((e) => e.goal_id === goal.id && e.date === date);
+    if (input.amount === 0) {
+      if (existing) b.remove("goal_entries", existing.id);
+      return { value: { goal: goal.title, date, amount: 0 } };
+    }
+    b.upsert(
+      "goal_entries",
+      check(GoalEntryFields, { id: existing?.id ?? newId(), goal_id: goal.id, date, amount: input.amount, note: input.note ?? existing?.note ?? "" }),
+    );
+    return { value: { goal: goal.title, date, amount: input.amount } };
+  });
+}
+
 // Events
 
 function summarizeOccurrence(o: Occurrence) {
@@ -398,17 +537,19 @@ export async function getAgenda(s: Scope, date: string | undefined, days: number
   const now = await userNow(s);
   const from = date ?? now.date;
   const to = addDays(from, days - 1);
-  const [occ, std, items, lists] = await Promise.all([
+  const [occ, std, items, lists, goals, entries] = await Promise.all([
     occurrences(s, from, to),
     stdDates(s, from, to),
     listRecords(s.env.DB, s.userId, "items"),
     listRecords(s.env.DB, s.userId, "lists"),
+    listRecords(s.env.DB, s.userId, "goals"),
+    listRecords(s.env.DB, s.userId, "goal_entries"),
   ]);
   const listMap = new Map(lists.map((l) => [l.id, l]));
   const item = (i: Item) => summarizeItem(i, listMap, now);
   const out = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
-    const a = buildAgenda(d, occ, std.events, items, now);
+    const a = buildAgenda(d, occ, std.events, items, now, goals, entries);
     out.push({
       date: d,
       ...(a.overdue.length ? { overdue_items: a.overdue.map(item) } : {}),
@@ -421,6 +562,9 @@ export async function getAgenda(s: Scope, date: string | undefined, days: number
             : { kind: "item", ...item(t.item) },
       ),
       items_due: a.untimed.map(item),
+      ...(a.goals.length
+        ? { goals: a.goals.map(({ goal, entry }) => ({ id: goal.id, title: goal.title, logged: entry?.amount ?? 0 })) }
+        : {}),
     });
   }
   return {

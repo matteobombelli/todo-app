@@ -17,6 +17,7 @@ interface SessionRow {
   timezone: string;
   event_reminder_minutes: number;
   item_reminder_time: string | null;
+  goal_reminder_time: string | null;
 }
 
 /** sessions.id for a raw cookie token: hex sha256. */
@@ -49,7 +50,7 @@ export async function sessionUser(req: Request, db: D1Database): Promise<(User &
   const id = await hashToken(token);
   const row = await db
     .prepare(
-      "SELECT s.expires_at, s.user_id, u.email, u.timezone, u.event_reminder_minutes, u.item_reminder_time FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
+      "SELECT s.expires_at, s.user_id, u.email, u.timezone, u.event_reminder_minutes, u.item_reminder_time, u.goal_reminder_time FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
     )
     .bind(id)
     .first<SessionRow>();
@@ -64,6 +65,7 @@ export async function sessionUser(req: Request, db: D1Database): Promise<(User &
     timezone: row.timezone,
     event_reminder_minutes: row.event_reminder_minutes,
     item_reminder_time: row.item_reminder_time,
+    goal_reminder_time: row.goal_reminder_time,
     expiresAt: row.expires_at,
     sessionId: id,
   };
@@ -83,6 +85,7 @@ export async function requireUser(c: Ctx): Promise<User> {
     timezone: session.timezone,
     event_reminder_minutes: session.event_reminder_minutes,
     item_reminder_time: session.item_reminder_time,
+    goal_reminder_time: session.goal_reminder_time,
   };
 }
 

@@ -30,7 +30,7 @@ describe("POST /auth/register", () => {
     const { user } = (await res.json()) as { user: { id: string; email: string; timezone: string } };
     expect(user.email).toBe("new@example.com");
     expect(user.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(Object.keys(user).sort()).toEqual(["email", "event_reminder_minutes", "id", "item_reminder_time", "timezone"]);
+    expect(Object.keys(user).sort()).toEqual(["email", "event_reminder_minutes", "goal_reminder_time", "id", "item_reminder_time", "timezone"]);
 
     const cookies = setCookies(res);
     expect(cookies).toHaveLength(1);

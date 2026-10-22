@@ -30,6 +30,8 @@ interface Schema extends DBSchema {
   items: { key: string; value: EntityRecord["items"] };
   events: { key: string; value: EntityRecord["events"] };
   event_exceptions: { key: string; value: EntityRecord["event_exceptions"] };
+  goals: { key: string; value: EntityRecord["goals"] };
+  goal_entries: { key: string; value: EntityRecord["goal_entries"] };
   outbox: { key: number; value: OutboxEntry };
   meta: { key: string; value: unknown };
   std_cache: { key: string; value: unknown };
@@ -49,6 +51,10 @@ export interface Snapshot {
 }
 
 const BATCH_SIZE = 100;
+// 2 added goals and goal_entries.
+const DB_VERSION = 2;
+
+const emptyTables = (): Tables => Object.fromEntries(ENTITIES.map((e) => [e, {}])) as unknown as Tables;
 const STORES = [...ENTITIES, "outbox", "meta", "std_cache"] as const;
 
 export interface StoreOptions {
@@ -65,7 +71,7 @@ export class DataStore {
   private apiBase: string;
   private listeners = new Set<() => void>();
   private snapshot: Snapshot = {
-    tables: { lists: {}, items: {}, events: {}, event_exceptions: {} },
+    tables: emptyTables(),
     loaded: false,
     settled: false,
     status: "idle",
@@ -87,12 +93,18 @@ export class DataStore {
   constructor(private options: StoreOptions = {}) {
     this.fetch = options.fetch ?? ((...args) => fetch(...args));
     this.apiBase = options.apiBase ?? "";
-    this.db = openDB<Schema>(options.dbName ?? "todo-app", 1, {
-      upgrade(db) {
-        for (const e of ENTITIES) db.createObjectStore(e, { keyPath: "id" });
-        db.createObjectStore("outbox", { autoIncrement: true });
-        db.createObjectStore("meta");
-        db.createObjectStore("std_cache");
+    this.db = openDB<Schema>(options.dbName ?? "todo-app", DB_VERSION, {
+      upgrade(db, oldVersion) {
+        for (const e of ENTITIES) if (!db.objectStoreNames.contains(e)) db.createObjectStore(e, { keyPath: "id" });
+        if (oldVersion < 1) {
+          db.createObjectStore("outbox", { autoIncrement: true });
+          db.createObjectStore("meta");
+          db.createObjectStore("std_cache");
+        }
+      },
+      // This tab is holding up another's upgrade (a newer build): reload into that build.
+      blocking() {
+        if (typeof location !== "undefined") location.reload();
       },
     });
   }
@@ -147,7 +159,7 @@ export class DataStore {
     const db = await this.db;
     const tx = db.transaction(STORES, "readwrite");
     await Promise.all([...STORES.map((s) => tx.objectStore(s).clear()), tx.done]);
-    this.set({ tables: { lists: {}, items: {}, events: {}, event_exceptions: {} }, loaded: false, settled: false, pending: 0 });
+    this.set({ tables: emptyTables(), loaded: false, settled: false, pending: 0 });
   }
 
   get<E extends Entity>(entity: E, id: string): EntityRecord[E] | undefined {
@@ -388,7 +400,8 @@ export class DataStore {
     const changes: { entity: Entity; put?: EntityRecord[Entity]; remove?: string }[] = [];
     const ops: Promise<unknown>[] = [];
     for (const e of ENTITIES) {
-      for (const row of data[e]) {
+      // A server from before an entity existed leaves it out.
+      for (const row of data[e] ?? []) {
         if (pending.has(`${e}:${row.id}`)) continue;
         if (row.deleted_at === null) {
           ops.push(tx.objectStore(e).put(row as never));

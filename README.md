@@ -1,6 +1,6 @@
 # todo-app
 
-Todo lists and a calendar at https://todo.matteob.dev: an offline-capable PWA for desktop and phone,
+Todo lists, a calendar and SMART goals at https://todo.matteob.dev: an offline-capable PWA for desktop and phone,
 showing Save the Date's dates alongside, with an MCP connector for Claude.
 
 ```bash

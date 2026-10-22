@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isDate, isTime } from "./dates";
+import { daysBetween, isDate, isTime } from "./dates";
 import { PALETTE_KEYS } from "./palette";
 import { parseRRule, serializeRRule } from "./recurrence";
 
@@ -123,10 +123,71 @@ export const EventExceptionFields = z
     { message: "Schedule override must be complete and valid" },
   );
 
+export const GOAL_STATUSES = ["draft", "active", "abandoned", "closed"] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
+
+const LongText = z.string().max(2_000);
+const Half = (n: number) => Number.isInteger(n * 2);
+
+// A goal's SMART answers: Specific, Achievable and Relevant are text; Measurable is target_days
+// plus an optional metric moving from metric_baseline to metric_target; Time-bound is the dates.
+// What may change, and when, is in shared/goals.ts (goalProblem).
+export const GoalFields = z
+  .object({
+    id: Id,
+    title: z.string().trim().min(1).max(200),
+    color: Color,
+    specific: LongText,
+    achievable: LongText,
+    relevant: LongText,
+    start_date: DateStr,
+    end_date: DateStr,
+    target_days: z.number().positive().refine(Half, "Whole or half days"),
+    metric_label: z.string().trim().min(1).max(120).nullable(),
+    metric_unit: z.string().trim().max(40).nullable(),
+    metric_baseline: z.number().finite().nullable(),
+    metric_target: z.number().finite().nullable(),
+    before_note: LongText,
+    after_value: z.number().finite().nullable(),
+    after_note: LongText.nullable(),
+    status: z.enum(GOAL_STATUSES),
+    // Server-owned: the client's value is ignored (see stampGoal).
+    committed_at: z.number().int().nullable(),
+    closed_at: z.number().int().nullable(),
+  })
+  .refine((g) => g.end_date >= g.start_date, { message: "The goal ends before it starts", path: ["end_date"] })
+  .refine((g) => g.end_date < g.start_date || g.target_days <= periodLength(g), {
+    message: "The target is more days than the goal lasts",
+    path: ["target_days"],
+  })
+  .refine(
+    (g) =>
+      g.metric_label === null
+        ? g.metric_unit === null && g.metric_baseline === null && g.metric_target === null && g.after_value === null
+        : g.metric_baseline !== null && g.metric_target !== null,
+    { message: "A metric needs a label, a starting value and a target", path: ["metric_label"] },
+  );
+
+// A day's effort on a goal: half or a full day. Zero is no entry.
+export const GoalEntryFields = z.object({
+  id: Id,
+  goal_id: Id,
+  date: DateStr,
+  amount: z.union([z.literal(0.5), z.literal(1)]),
+  note: z.string().max(500),
+});
+
+/** Days from start_date to end_date, both included. */
+export function periodLength(g: { start_date: string; end_date: string }): number {
+  return daysBetween(g.start_date, g.end_date) + 1;
+}
+
 export type ListFields = z.infer<typeof ListFields>;
 export type ItemFields = z.infer<typeof ItemFields>;
 export type EventFields = z.infer<typeof EventFields>;
 export type EventExceptionFields = z.infer<typeof EventExceptionFields>;
+export type GoalFields = z.infer<typeof GoalFields>;
+export type GoalEntryFields = z.infer<typeof GoalEntryFields>;
 
 export interface Meta {
   created_at: number;
@@ -139,8 +200,10 @@ export type List = ListFields & Meta;
 export type Item = ItemFields & Meta;
 export type CalendarEvent = EventFields & Meta;
 export type EventException = EventExceptionFields & Meta;
+export type Goal = GoalFields & Meta;
+export type GoalEntry = GoalEntryFields & Meta;
 
-export const ENTITIES = ["lists", "items", "events", "event_exceptions"] as const;
+export const ENTITIES = ["lists", "items", "events", "event_exceptions", "goals", "goal_entries"] as const;
 export type Entity = (typeof ENTITIES)[number];
 
 export interface EntityRecord {
@@ -148,6 +211,8 @@ export interface EntityRecord {
   items: Item;
   events: CalendarEvent;
   event_exceptions: EventException;
+  goals: Goal;
+  goal_entries: GoalEntry;
 }
 
 /** What a client sends for a record: everything but the server-owned Meta fields. */
@@ -158,6 +223,7 @@ export const CHILDREN: Partial<Record<Entity, { entity: Entity; column: string }
   lists: [{ entity: "items", column: "list_id" }],
   items: [{ entity: "items", column: "parent_id" }],
   events: [{ entity: "event_exceptions", column: "event_id" }],
+  goals: [{ entity: "goal_entries", column: "goal_id" }],
 };
 
 export const FIELD_SCHEMAS = {
@@ -165,6 +231,8 @@ export const FIELD_SCHEMAS = {
   items: ItemFields,
   events: EventFields,
   event_exceptions: EventExceptionFields,
+  goals: GoalFields,
+  goal_entries: GoalEntryFields,
 } as const;
 
 // Record left loose here: FIELD_SCHEMAS[entity] validates it once the entity is known.
@@ -189,4 +257,6 @@ export interface SyncResponse {
   items: Item[];
   events: CalendarEvent[];
   event_exceptions: EventException[];
+  goals: Goal[];
+  goal_entries: GoalEntry[];
 }

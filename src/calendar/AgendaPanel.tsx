@@ -1,14 +1,18 @@
 import { Ellipsis } from "lucide-react";
-import { useMemo, type MouseEvent, type ReactNode } from "react";
+import { useMemo, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { buildAgenda, type ExternalEvent } from "../../shared/agenda";
-import type { Item } from "../../shared/entities";
+import type { Goal, GoalEntry, Item } from "../../shared/entities";
+import { canLog } from "../../shared/goals";
 import type { Now } from "../../shared/items";
 import type { Occurrence } from "../../shared/recurrence";
 import { STD_COLOR } from "../../shared/palette";
 import { paletteVar } from "../components/ColorPicker";
 import { IconButton } from "../components/IconButton";
-import { useData } from "../data/hooks";
+import { Link } from "react-router";
+import { setNavDirection } from "../components/motion";
+import { useData, useGoalToday } from "../data/hooks";
 import { formatLongDate, formatTime } from "../format";
+import { EffortControl, formatDays } from "../goals/effort";
 import { ItemRow } from "../todo/ItemRow";
 
 export type CalendarTarget =
@@ -85,6 +89,26 @@ function ExternalRow({ event, handlers }: { event: ExternalEvent; handlers: Cale
   );
 }
 
+/** A goal running on the day: effort can be set while the day can be logged, and is shown after. */
+function GoalRow({ goal, entry, date, entries }: { goal: Goal; entry: GoalEntry | null; date: string; entries: GoalEntry[] }) {
+  const today = useGoalToday();
+  return (
+    <div className="row agenda-goal">
+      <Link to={`/goals/${goal.id}`} className="item__body" viewTransition onClick={() => setNavDirection("push")}>
+        <span className="agenda-event__bar" style={{ background: paletteVar(goal.color) }} aria-hidden="true" />
+        <span className="row__title">{goal.title}</span>
+      </Link>
+      {canLog(goal, date, today) ? (
+        <span style={{ "--goal": paletteVar(goal.color) } as CSSProperties}>
+          <EffortControl goal={goal} date={date} entries={entries} label={`Effort on ${goal.title}`} />
+        </span>
+      ) : (
+        date <= today && <span className="row__meta">{entry ? formatDays(entry.amount) : "Nothing logged"}</span>
+      )}
+    </div>
+  );
+}
+
 /** One day's agenda in the order shared/agenda.ts defines, so it matches what Claude reports. */
 export function AgendaPanel({
   date,
@@ -99,10 +123,11 @@ export function AgendaPanel({
   external: ExternalEvent[];
   handlers: CalendarHandlers;
 }) {
-  const { items, lists } = useData().tables;
+  const { items, lists, goals, goal_entries } = useData().tables;
+  const entries = useMemo(() => Object.values(goal_entries), [goal_entries]);
   const agenda = useMemo(
-    () => buildAgenda(date, occurrences, external, Object.values(items), now),
-    [date, occurrences, external, items, now],
+    () => buildAgenda(date, occurrences, external, Object.values(items), now, Object.values(goals), entries),
+    [date, occurrences, external, items, now, goals, entries],
   );
   const itemRow = (item: Item) => (
     <li key={item.id}>
@@ -116,7 +141,7 @@ export function AgendaPanel({
       />
     </li>
   );
-  const empty = !agenda.overdue.length && !agenda.bars.length && !agenda.timed.length && !agenda.untimed.length;
+  const empty = !agenda.overdue.length && !agenda.bars.length && !agenda.timed.length && !agenda.untimed.length && !agenda.goals.length;
 
   return (
     <section className="agenda" aria-label={`Agenda for ${formatLongDate(date)}`}>
@@ -166,6 +191,18 @@ export function AgendaPanel({
         )}
         {agenda.untimed.map(itemRow)}
       </ul>
+      {agenda.goals.length > 0 && (
+        <>
+          <h3 className="agenda__heading">Goals</h3>
+          <ul className="rows">
+            {agenda.goals.map(({ goal, entry }) => (
+              <li key={goal.id}>
+                <GoalRow goal={goal} entry={entry} date={date} entries={entries} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }

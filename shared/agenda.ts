@@ -1,4 +1,4 @@
-import type { Item } from "./entities";
+import type { Goal, GoalEntry, Item } from "./entities";
 import { compareItems, type Now } from "./items";
 import type { Occurrence } from "./recurrence";
 
@@ -38,6 +38,8 @@ export interface DayAgenda {
   timed: TimedEntry[];
   /** Items due this date without a time, completed ones included. */
   untimed: Item[];
+  /** Committed goals running on this date, by title, with the effort logged that day. */
+  goals: { goal: Goal; entry: GoalEntry | null }[];
 }
 
 /**
@@ -50,6 +52,8 @@ export function buildAgenda(
   external: ExternalEvent[],
   items: Item[],
   now: Now,
+  goals: Goal[] = [],
+  entries: GoalEntry[] = [],
 ): DayAgenda {
   const live = items.filter((i) => i.deleted_at === null);
   const bars: BarEntry[] = [];
@@ -79,5 +83,12 @@ export function buildAgenda(
     bars,
     timed,
     untimed: due.filter((i) => i.due_time === null),
+    goals: goals
+      .filter((g) => g.deleted_at === null && g.status !== "draft" && g.start_date <= date && g.end_date >= date)
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map((goal) => ({
+        goal,
+        entry: entries.find((e) => e.goal_id === goal.id && e.date === date && e.deleted_at === null) ?? null,
+      })),
   };
 }

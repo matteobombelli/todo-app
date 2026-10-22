@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { EVENT_REMINDER_MINUTES, ITEM_REMINDER_TIMES, type SettingsBody } from "../shared/api";
+import { EVENT_REMINDER_MINUTES, GOAL_REMINDER_TIMES, ITEM_REMINDER_TIMES, type SettingsBody } from "../shared/api";
 import { useAuth } from "./auth/AuthProvider";
 import { useConfirm } from "./components/ConfirmDialog";
 import { Modal } from "./components/Modal";
@@ -96,7 +96,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             ))}
           </select>
           <span className="field__hint">
-            Used by Claude to know what "today" is, and to time reminders. The app itself uses this device's clock.
+            Used by Claude to know what "today" is, to time reminders, and for which days goal effort can be logged.
+            Otherwise the app uses this device's clock.
           </span>
         </label>
         <div className="field">
@@ -131,6 +132,20 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             {ITEM_REMINDER_TIMES.map((t) => (
               <option key={t} value={t}>
                 {`At ${formatTime(t)} on the day`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field__label">Goals not logged today</span>
+          <select
+            value={user.goal_reminder_time ?? ""}
+            onChange={(e) => void onSettings({ goal_reminder_time: e.target.value || null })}
+          >
+            <option value="">No reminder</option>
+            {GOAL_REMINDER_TIMES.map((t) => (
+              <option key={t} value={t}>
+                {`At ${formatTime(t)}`}
               </option>
             ))}
           </select>

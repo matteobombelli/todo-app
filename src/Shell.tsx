@@ -1,4 +1,4 @@
-import { CalendarDays, CloudOff, ListTodo, Plus, RefreshCw, Settings, TriangleAlert } from "lucide-react";
+import { CalendarDays, CloudOff, ListTodo, Plus, RefreshCw, Settings, Target, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { useAuth } from "./auth/AuthProvider";
@@ -43,6 +43,10 @@ function Tabs({ className }: { className: string }) {
         <CalendarDays size={20} aria-hidden="true" />
         <span>Calendar</span>
       </NavLink>
+      <NavLink to="/goals" className="tab" viewTransition onClick={() => setNavDirection("tab")}>
+        <Target size={20} aria-hidden="true" />
+        <span>Goals</span>
+      </NavLink>
     </nav>
   );
 }
@@ -75,7 +79,7 @@ function Sidebar({ onSettings }: { onSettings: () => void }) {
   );
 }
 
-/** The signed-in app: loads the user's mirror, keeps it synced, and lays out the two tabs. */
+/** The signed-in app: loads the user's mirror, keeps it synced, and lays out the tabs. */
 export default function Shell() {
   const { user } = useAuth();
   const { loaded } = useData();

@@ -1,6 +1,7 @@
 import { buildPushPayload, type VapidKeys } from "@block65/webcrypto-web-push";
 import { addDays, nowIn, toDayNumber, toMinutes } from "../../shared/dates";
 import type { Item } from "../../shared/entities";
+import { canLog } from "../../shared/goals";
 import { occurrencesInRange } from "../../shared/recurrence";
 import { listRecords, toRecord } from "./records";
 
@@ -27,6 +28,7 @@ interface PushUser {
   timezone: string;
   event_reminder_minutes: number;
   item_reminder_time: string | null;
+  goal_reminder_time: string | null;
 }
 
 interface SubscriptionRow {
@@ -44,7 +46,7 @@ function minuteOf(date: string, time: string): number {
 /** Reminders due at `at` for every user with a push subscription, minus those already sent. */
 export async function dueReminders(db: D1Database, at: Date): Promise<Reminder[]> {
   const { results: users } = await db
-    .prepare("SELECT id, timezone, event_reminder_minutes, item_reminder_time FROM users WHERE id IN (SELECT user_id FROM push_subscriptions)")
+    .prepare("SELECT id, timezone, event_reminder_minutes, item_reminder_time, goal_reminder_time FROM users WHERE id IN (SELECT user_id FROM push_subscriptions)")
     .all<PushUser>();
   const out: Reminder[] = [];
   // One user's bad data (or a failed query) mustn't hold back everyone else's reminders.
@@ -109,6 +111,28 @@ async function userReminders(db: D1Database, user: PushUser, at: Date): Promise<
       body: lead ? `In ${lead} min · ${span}` : span,
       url: "/calendar",
     });
+  }
+
+  // One evening nudge naming the goals that can be logged today and haven't been.
+  if (user.goal_reminder_time !== null && due(now.date, user.goal_reminder_time)) {
+    const [goals, logged] = await Promise.all([
+      listRecords(db, user.id, "goals"),
+      db
+        .prepare("SELECT goal_id FROM goal_entries WHERE user_id = ? AND date = ? AND deleted_at IS NULL")
+        .bind(user.id, now.date)
+        .all<{ goal_id: string }>(),
+    ]);
+    const done = new Set(logged.results.map((r) => r.goal_id));
+    const open = goals.filter((g) => canLog(g, now.date, now.date) && !done.has(g.id)).sort((a, b) => a.end_date.localeCompare(b.end_date));
+    if (open.length) {
+      out.push({
+        userId: user.id,
+        key: `goals:${now.date}`,
+        title: open.length === 1 ? `Log today on "${open[0].title}"?` : `Log today on ${open.length} goals?`,
+        body: open.length === 1 ? "Half a day counts too." : open.map((g) => g.title).join(", "),
+        url: open.length === 1 ? `/goals/${open[0].id}` : "/goals",
+      });
+    }
   }
 
   return out.filter((r) => !sent.has(r.key));

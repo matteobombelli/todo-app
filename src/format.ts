@@ -4,6 +4,7 @@ import { addDays } from "../shared/dates";
 const utc = (date: string, time = "00:00") => new Date(`${date}T${time}:00Z`);
 
 const weekdayDay = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const monthDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 const withYear = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
 const monthYear = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
@@ -41,4 +42,9 @@ export function formatShortWeekday(date: string): string {
 
 export function formatDayMonth(date: string): string {
   return weekdayDay.format(utc(date));
+}
+
+/** "Oct 6", with the year when it is not this year's. */
+export function formatShortDate(date: string, today: string): string {
+  return date.slice(0, 4) === today.slice(0, 4) ? monthDay.format(utc(date)) : withYear.format(utc(date));
 }

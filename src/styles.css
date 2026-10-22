@@ -646,7 +646,8 @@ button:disabled {
 
 .tabs--bottom {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   border-top: var(--hairline) solid var(--border);
   background: var(--material);
@@ -2327,4 +2328,421 @@ div.form__error p {
 
 .date-sheet__quick > button {
   flex: 1;
+}
+
+/* Goals */
+
+.goal-cards {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 0.75rem;
+}
+
+.goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  background: var(--surface);
+  animation: rise-in var(--medium) var(--ease-out) backwards;
+}
+
+.goal-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: -0.25rem;
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+}
+
+.goal-card__head:active {
+  background: var(--fill);
+}
+
+.goal-card__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.goal-card__title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.goal-card__meta,
+.goal-card__pace {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-card__lock {
+  flex: none;
+  color: var(--muted);
+}
+
+.goal-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 1.9rem;
+}
+
+.goal-card__pace--ahead,
+.goal-stat__value--ahead {
+  color: var(--success);
+}
+
+.goal-card__pace--behind,
+.goal-stat__value--behind {
+  color: var(--palette-orange);
+}
+
+.goal-ring {
+  flex: none;
+}
+
+.goal-ring__track,
+.goal-ring__fill {
+  fill: none;
+  stroke-width: 5;
+}
+
+.goal-ring__track {
+  stroke: var(--fill);
+}
+
+.goal-ring__fill {
+  stroke: var(--goal, var(--accent));
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--medium) var(--ease-out);
+}
+
+.goal-ring__text {
+  fill: var(--fg);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pace-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fill);
+}
+
+.pace-bar__fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--goal, var(--accent));
+  transition: width var(--medium) var(--ease-out);
+}
+
+/* Where an even pace to the target would be today. */
+.pace-bar__tick {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--fg);
+  opacity: 0.45;
+}
+
+/* The 0 / ½ / 1 effort control: the thumb takes the goal's colour once something is logged. */
+.effort {
+  flex: none;
+  min-width: 7.5rem;
+}
+
+.effort button {
+  padding: 0.25rem 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.effort:has(button:not(:first-child)[aria-checked="true"])::before {
+  background: var(--goal, var(--accent));
+}
+
+.effort button:not(:first-child)[aria-checked="true"] {
+  color: var(--on-color);
+}
+
+.goal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1.25rem;
+}
+
+.goal-section__heading {
+  padding: 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.goal-title {
+  color: var(--goal, var(--fg));
+}
+
+.goal-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: -0.25rem 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.goal-draft {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.goal-stats {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.goal-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.goal-stat__label {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.goal-stat__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-stat__value small {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.goal-after-button {
+  align-self: flex-start;
+  margin-top: 1rem;
+}
+
+.log-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.log-row__main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.log-row__note {
+  font-size: 0.9375rem;
+}
+
+.heatmap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 8.75rem);
+  gap: 1rem 1.5rem;
+}
+
+.heatmap__month {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.heatmap__name {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.heatmap__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  width: 8.75rem;
+}
+
+.heatmap__day {
+  display: inline-block;
+  aspect-ratio: 1;
+  min-width: 0.7rem;
+  border-radius: 3px;
+}
+
+.heatmap__day--full {
+  background: var(--goal, var(--accent));
+}
+
+.heatmap__day--half {
+  background: color-mix(in srgb, var(--goal, var(--accent)) 40%, transparent);
+}
+
+.heatmap__day--none {
+  background: var(--fill);
+}
+
+.heatmap__day--future {
+  box-shadow: inset 0 0 0 var(--hairline) var(--border);
+}
+
+.heatmap__day--today {
+  outline: var(--stroke) solid var(--fg);
+  outline-offset: 1px;
+}
+
+.heatmap__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.heatmap__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.heatmap__legend .heatmap__day {
+  width: 0.7rem;
+}
+
+.before-after {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.before-after__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.75rem 0.85rem;
+}
+
+.before-after__side + .before-after__side {
+  border-left: var(--hairline) solid var(--border);
+}
+
+.before-after__label {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.before-after__value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.before-quote {
+  margin: 0;
+  font-size: 0.9375rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.before-metric {
+  margin: 0;
+}
+
+.smart-details {
+  padding: 0 0.5rem;
+}
+
+.smart-details dd {
+  white-space: pre-wrap;
+}
+
+.goal-history {
+  font-size: 0.9375rem;
+}
+
+.goal-history__note {
+  color: var(--muted);
+}
+
+/* The SMART editor: each answer behind its letter. */
+.smart-field {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.smart-field > .field {
+  flex: 1;
+}
+
+.smart-field__letter {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-top: 0.1rem;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.field__hint--warn {
+  color: var(--palette-orange);
+}
+
+.commit-warning {
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--palette-yellow) 16%, transparent);
+}
+
+.commit-warning strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.commit-warning p {
+  margin: 0.3rem 0 0;
+  font-size: 0.875rem;
+}
+
+/* A goal in the day's agenda. */
+.agenda-goal {
+  gap: 0.6rem;
+}
+
+.agenda-goal .item__body {
+  text-decoration: none;
 }

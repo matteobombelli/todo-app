@@ -6,6 +6,8 @@ import { PALETTE, STD_COLOR } from "../shared/palette";
 import App from "./App";
 import { RequireAuth } from "./auth/RequireAuth";
 import CalendarPage from "./calendar/CalendarPage";
+import GoalPage from "./goals/GoalPage";
+import GoalsPage from "./goals/GoalsPage";
 import LoginPage from "./routes/LoginPage";
 import RegisterPage from "./routes/RegisterPage";
 import Shell from "./Shell";
@@ -40,6 +42,8 @@ const router = createBrowserRouter([
               { path: "todo", element: <ListsPage /> },
               { path: "todo/:listId", element: <ListPage /> },
               { path: "calendar", element: <CalendarPage /> },
+              { path: "goals", element: <GoalsPage /> },
+              { path: "goals/:goalId", element: <GoalPage /> },
             ],
           },
         ],

@@ -3,11 +3,16 @@ import {
   ENTITIES,
   FIELD_SCHEMAS,
   type Entity,
+  type GoalEntryFields,
+  type GoalFields,
   type EntityRecord,
   type Mutation,
   type MutationResult,
   type SyncResponse,
 } from "../../shared/entities";
+import { DEFAULT_TIMEZONE } from "../../shared/api";
+import { nowIn } from "../../shared/dates";
+import { entryDeleteProblem, entryProblem, goalDeleteProblem, goalProblem, stampGoal } from "../../shared/goals";
 import { cascadeToSubtasks } from "../../shared/items";
 
 // The single write path for synced records. Every write bumps the owner's user_seq and stamps the
@@ -82,11 +87,15 @@ function chunks<T>(list: T[], size = MAX_PARAMS): T[][] {
 
 const rowKey = (entity: Entity, id: string) => `${entity}:${id}`;
 
-/** Every row a batch reads (targets and parents, whoever owns them) and its already-applied ops, in one round trip. */
+/**
+ * Every row a batch reads (targets and parents, whoever owns them), its already-applied ops and the
+ * user's timezone (goal rules go by their "today"), in one round trip.
+ */
 async function loadBatch(
   db: D1Database,
+  userId: string,
   mutations: Mutation[],
-): Promise<{ done: Map<string, { user_id: string; seq: number }>; rows: Map<string, Row> }> {
+): Promise<{ done: Map<string, { user_id: string; seq: number }>; rows: Map<string, Row>; timezone: string }> {
   const ids = new Map<Entity, Set<string>>();
   const want = (entity: Entity, id: unknown) => {
     if (typeof id !== "string") return;
@@ -94,8 +103,12 @@ async function loadBatch(
     ids.get(entity)!.add(id);
   };
   const writtenItems: string[] = [];
+  const entryGoals: string[] = [];
+  const deletedEntries: string[] = [];
   for (const m of mutations) {
     want(m.entity, m.record.id);
+    if (m.entity === "goal_entries" && m.action === "delete") deletedEntries.push(m.record.id);
+    if (m.entity === "goal_entries" && m.action === "upsert" && typeof m.record.goal_id === "string") entryGoals.push(m.record.goal_id);
     if (m.action !== "upsert") continue;
     for (const parent of PARENTS[m.entity] ?? []) want(parent.entity, (m.record as Record<string, unknown>)[parent.column]);
     if (m.entity === "items") writtenItems.push(m.record.id);
@@ -116,7 +129,23 @@ async function loadBatch(
       statement: db.prepare(`SELECT * FROM items WHERE parent_id IN (${c.map(() => "?").join(", ")}) AND deleted_at IS NULL`).bind(...c),
     });
   }
-  const results = await db.batch([...opQueries, ...rowQueries.map((q) => q.statement)]);
+  // An entry is checked against its goal and the goal's other entries (one a day).
+  for (const c of chunks([...new Set(entryGoals)])) {
+    rowQueries.push({
+      entity: "goal_entries",
+      statement: db.prepare(`SELECT * FROM goal_entries WHERE goal_id IN (${c.map(() => "?").join(", ")}) AND deleted_at IS NULL`).bind(...c),
+    });
+  }
+  for (const c of chunks([...new Set(deletedEntries)])) {
+    rowQueries.push({
+      entity: "goals",
+      statement: db
+        .prepare(`SELECT * FROM goals WHERE id IN (SELECT goal_id FROM goal_entries WHERE id IN (${c.map(() => "?").join(", ")}))`)
+        .bind(...c),
+    });
+  }
+  const userQuery = db.prepare("SELECT timezone FROM users WHERE id = ?").bind(userId);
+  const results = await db.batch([...opQueries, ...rowQueries.map((q) => q.statement), userQuery]);
   const done = new Map<string, { user_id: string; seq: number }>();
   for (const r of results.slice(0, opQueries.length)) {
     for (const op of r.results as { op_id: string; user_id: string; seq: number }[]) done.set(op.op_id, op);
@@ -125,7 +154,8 @@ async function loadBatch(
   rowQueries.forEach((q, i) => {
     for (const row of results[opQueries.length + i].results as Row[]) rows.set(rowKey(q.entity, row.id), row);
   });
-  return { done, rows };
+  const timezone = (results.at(-1)!.results[0] as { timezone: string } | undefined)?.timezone ?? DEFAULT_TIMEZONE;
+  return { done, rows, timezone };
 }
 
 function subtasksOf(rows: Map<string, Row>, id: string): (Row & { list_id: string; completed_at: number | null })[] {
@@ -150,6 +180,11 @@ function subtaskProblem(
   return null;
 }
 
+function goalOf(rows: Map<string, Row>, id: string): GoalFields | null {
+  const row = rows.get(rowKey("goals", id));
+  return row && row.deleted_at === null ? toRecord<"goals">(row) : null;
+}
+
 export type BatchOutcome =
   | { applied: true; results: MutationResult[] }
   | { applied: false; rejected: { index: number; result: MutationResult }[] };
@@ -165,7 +200,8 @@ export async function applyMutation(db: D1Database, userId: string, m: Mutation,
  * single user_seq bump, so its rows share one seq.
  */
 export async function applyMutations(db: D1Database, userId: string, mutations: Mutation[], now = Date.now()): Promise<BatchOutcome> {
-  const { done, rows } = await loadBatch(db, mutations);
+  const { done, rows, timezone } = await loadBatch(db, userId, mutations);
+  const today = nowIn(timezone, new Date(now)).date;
   const seq = "(SELECT value FROM user_seq WHERE user_id = ?)";
   const statements: D1PreparedStatement[] = [];
   const rejected: { index: number; result: MutationResult }[] = [];
@@ -195,6 +231,13 @@ export async function applyMutations(db: D1Database, userId: string, mutations: 
     if (m.action === "delete") {
       // Deleting what is already gone is a no-op that still succeeds.
       if (existing && existing.deleted_at === null) {
+        const problem =
+          m.entity === "goals"
+            ? goalDeleteProblem(current as GoalFields, now)
+            : m.entity === "goal_entries"
+              ? entryDeleteProblem(goalOf(rows, existing.goal_id as string), current as GoalEntryFields, today)
+              : null;
+        if (problem) return reject(problem, current);
         writes = true;
         existing.deleted_at = now;
         statements.push(
@@ -223,7 +266,7 @@ export async function applyMutations(db: D1Database, userId: string, mutations: 
     if (!parsed.success) return reject(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "), current);
     // A deletion wins over a concurrent edit: the tombstone stays and the edit is dropped.
     if (existing?.deleted_at != null) return reject("Deleted", current);
-    const fields = parsed.data as Record<string, unknown>;
+    let fields = parsed.data as Record<string, unknown>;
 
     for (const parentRef of PARENTS[m.entity] ?? []) {
       const ref = fields[parentRef.column] as string | null;
@@ -232,6 +275,20 @@ export async function applyMutations(db: D1Database, userId: string, mutations: 
       if (!parent || parent.user_id !== userId || parent.deleted_at !== null) {
         return reject(`${parentRef.column} does not name a live ${parentRef.entity.slice(0, -1)}`, current);
       }
+    }
+    if (m.entity === "goals") {
+      const stamped = stampGoal(current as GoalFields | null, fields as GoalFields, now);
+      const problem = goalProblem(current as GoalFields | null, stamped, today, now);
+      if (problem) return reject(problem, current);
+      fields = stamped;
+    }
+    if (m.entity === "goal_entries") {
+      const entry = fields as GoalEntryFields;
+      const sameDay = [...rows]
+        .filter(([key, row]) => key.startsWith("goal_entries:") && row.deleted_at === null && row.goal_id === entry.goal_id && row.date === entry.date)
+        .map(([, row]) => toRecord<"goal_entries">(row));
+      const problem = entryProblem(goalOf(rows, entry.goal_id)!, current as GoalEntryFields | null, entry, today, sameDay);
+      if (problem) return reject(problem, current);
     }
     if (m.entity === "items") {
       const problem = subtaskProblem(fields as { id: string; list_id: string; parent_id: string | null; rrule: string | null }, rows);

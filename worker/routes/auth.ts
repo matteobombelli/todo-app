@@ -1,4 +1,4 @@
-import { DEFAULT_ITEM_REMINDER_TIME, DEFAULT_TIMEZONE, LoginBody, RegisterBody, SettingsBody, type User } from "../../shared/api";
+import { DEFAULT_GOAL_REMINDER_TIME, DEFAULT_ITEM_REMINDER_TIME, DEFAULT_TIMEZONE, LoginBody, RegisterBody, SettingsBody, type User } from "../../shared/api";
 import { newId } from "../../shared/ids";
 import { DUMMY_HASH, hashPassword, verifyPassword } from "../auth/password";
 import { createSession, destroySession, requireUser } from "../auth/session";
@@ -11,6 +11,7 @@ interface UserRow {
   timezone: string;
   event_reminder_minutes: number;
   item_reminder_time: string | null;
+  goal_reminder_time: string | null;
   password_hash: string;
 }
 
@@ -33,6 +34,7 @@ export function registerAuthRoutes(r: Router): void {
       timezone: DEFAULT_TIMEZONE,
       event_reminder_minutes: 0,
       item_reminder_time: DEFAULT_ITEM_REMINDER_TIME,
+      goal_reminder_time: DEFAULT_GOAL_REMINDER_TIME,
     };
     try {
       await c.env.DB.batch([
@@ -56,7 +58,7 @@ export function registerAuthRoutes(r: Router): void {
 
   r.post("/auth/login", async (c) => {
     const body = await parseJson(c.req, LoginBody);
-    const row = await c.env.DB.prepare("SELECT id, email, timezone, event_reminder_minutes, item_reminder_time, password_hash FROM users WHERE email = ?")
+    const row = await c.env.DB.prepare("SELECT id, email, timezone, event_reminder_minutes, item_reminder_time, goal_reminder_time, password_hash FROM users WHERE email = ?")
       .bind(body.email)
       .first<UserRow>();
     const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
@@ -69,6 +71,7 @@ export function registerAuthRoutes(r: Router): void {
         timezone: row.timezone,
         event_reminder_minutes: row.event_reminder_minutes,
         item_reminder_time: row.item_reminder_time,
+        goal_reminder_time: row.goal_reminder_time,
       } satisfies User,
     });
   });
@@ -91,17 +94,20 @@ export function registerAuthRoutes(r: Router): void {
     // time can be set to null (off), so whether it was sent travels separately.
     const row = await c.env.DB.prepare(
       `UPDATE users SET timezone = COALESCE(?, timezone), event_reminder_minutes = COALESCE(?, event_reminder_minutes),
-         item_reminder_time = CASE WHEN ? THEN ? ELSE item_reminder_time END
-       WHERE id = ? RETURNING timezone, event_reminder_minutes, item_reminder_time`,
+         item_reminder_time = CASE WHEN ? THEN ? ELSE item_reminder_time END,
+         goal_reminder_time = CASE WHEN ? THEN ? ELSE goal_reminder_time END
+       WHERE id = ? RETURNING timezone, event_reminder_minutes, item_reminder_time, goal_reminder_time`,
     )
       .bind(
         body.timezone ?? null,
         body.event_reminder_minutes ?? null,
         body.item_reminder_time !== undefined ? 1 : 0,
         body.item_reminder_time ?? null,
+        body.goal_reminder_time !== undefined ? 1 : 0,
+        body.goal_reminder_time ?? null,
         user.id,
       )
-      .first<Pick<User, "timezone" | "event_reminder_minutes" | "item_reminder_time">>();
+      .first<Pick<User, "timezone" | "event_reminder_minutes" | "item_reminder_time" | "goal_reminder_time">>();
     return json({ user: { ...user, ...row } satisfies User });
   });
 }

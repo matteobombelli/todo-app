@@ -85,6 +85,31 @@ const EventDelete = z.object({
   occurrence_date: DateArg.optional(),
 });
 
+const GoalRef = z.string().describe("Goal id, or its title (case-insensitive)");
+
+const EffortLog = z.object({
+  goal: GoalRef,
+  amount: z.union([z.literal(0), z.literal(0.5), z.literal(1)]).describe("Days of effort: 1, 0.5, or 0 to clear the day"),
+  day: z.enum(["today", "yesterday"]).optional().describe("Default today"),
+  note: z.string().max(500).optional(),
+});
+
+const GoalCreate = z.object({
+  title: z.string(),
+  color: Color.optional(),
+  specific: z.string().optional(),
+  achievable: z.string().optional(),
+  relevant: z.string().optional(),
+  start_date: DateArg,
+  end_date: DateArg,
+  target_days: z.number().describe("Days of effort to log over the period, in whole or half days"),
+  metric: z
+    .object({ label: z.string(), unit: z.string().optional(), before: z.number(), target: z.number() })
+    .optional()
+    .describe('A number the goal should move, e.g. {label: "5k time", unit: "min", before: 31.3, target: 27}'),
+  before_note: z.string().optional().describe("Where the user is starting from, in their words"),
+});
+
 const TIME_NOTE =
   "Dates and times are floating local wall-clock values in the user's timezone (get_agenda reports it and today's date).";
 const STD_NOTE =
@@ -254,6 +279,44 @@ export function buildServer(env: Env, userId: string): McpServer {
       annotations: { destructiveHint: true },
     },
     (args) => write(args, "events", EventDelete, (ops) => todo.deleteEvents(s, ops)),
+  );
+
+  server.registerTool(
+    "list_goals",
+    {
+      description: `The user's goals with progress: phase (draft, upcoming, active, review = ended and waiting for its "after", closed, abandoned), days of effort logged against target_days, score_percent (can pass 100), pace_days (ahead of or behind an even pace), and what's logged today. ${TIME_NOTE}`,
+      inputSchema: z.object({}),
+      annotations: readOnly,
+    },
+    () => run(() => todo.listGoals(s)),
+  );
+
+  server.registerTool(
+    "get_goal",
+    {
+      description: "One goal in full: its SMART answers, the before (and after, once closed) of its metric, whether it's locked, and every day of effort logged.",
+      inputSchema: z.object({ goal: GoalRef }),
+      annotations: readOnly,
+    },
+    ({ goal }) => run(() => todo.getGoal(s, goal)),
+  );
+
+  server.registerTool(
+    "log_goal_effort",
+    {
+      description: `Log a day's effort on an active goal: 1 for a real day of work, 0.5 for a lighter one, 0 to take back what was logged. Only today or yesterday can be logged, once a day, inside the goal's dates; older days are sealed. Ask the user how much effort they put in rather than guessing. Log several with \`entries\`. ${TIME_NOTE}`,
+      inputSchema: batchable(EffortLog, "entries", "entries"),
+    },
+    (args) => write(args, "entries", EffortLog, (ops) => todo.logGoalEffort(s, ops)),
+  );
+
+  server.registerTool(
+    "create_goal",
+    {
+      description: `Draft a SMART goal: specific (what exactly), measurable (target_days of effort, and optionally a metric moving from before to target), achievable (why it's doable), relevant (why it matters), time-bound (start_date to end_date). It is saved as a draft; the user commits to it in the app, which locks it. ${TIME_NOTE}`,
+      inputSchema: GoalCreate,
+    },
+    (input) => run(() => todo.createGoal(s, input)),
   );
 
   server.registerTool(

@@ -24,6 +24,11 @@ export const EVENT_REMINDER_MINUTES = [0, 5, 10, 15, 30, 60] as const;
 export const DEFAULT_ITEM_REMINDER_TIME = "09:00";
 export const ITEM_REMINDER_TIMES = ["06:00", "07:00", "08:00", "09:00", "10:00", "12:00", "18:00", "20:00"] as const;
 
+// When the evening nudge for goals not logged today goes out; null turns it off. The default is
+// also the users.goal_reminder_time column default (migrations/0007).
+export const DEFAULT_GOAL_REMINDER_TIME = "20:00";
+export const GOAL_REMINDER_TIMES = ["18:00", "19:00", "20:00", "21:00", "22:00"] as const;
+
 export const SettingsBody = z
   .object({
     timezone: z.string().refine(isTimeZone, "Unknown timezone").optional(),
@@ -32,11 +37,9 @@ export const SettingsBody = z
       .refine((n) => (EVENT_REMINDER_MINUTES as readonly number[]).includes(n), "Unsupported reminder time")
       .optional(),
     item_reminder_time: z.string().refine(isTime, "Expected HH:MM").nullable().optional(),
+    goal_reminder_time: z.string().refine(isTime, "Expected HH:MM").nullable().optional(),
   })
-  .refine(
-    (b) => b.timezone !== undefined || b.event_reminder_minutes !== undefined || b.item_reminder_time !== undefined,
-    "Nothing to update",
-  );
+  .refine((b) => Object.values(b).some((v) => v !== undefined), "Nothing to update");
 export type SettingsBody = z.input<typeof SettingsBody>;
 
 export interface User {
@@ -45,6 +48,7 @@ export interface User {
   timezone: string;
   event_reminder_minutes: number;
   item_reminder_time: string | null;
+  goal_reminder_time: string | null;
 }
 
 export const PushSubscriptionBody = z.object({

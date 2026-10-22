@@ -91,7 +91,7 @@ describe("buildAgenda", () => {
       [item({ due_date: "2026-09-23" }), item({ due_date: "2026-09-22", deleted_at: 1 })],
       NOW,
     );
-    expect(a).toEqual({ date: "2026-09-22", overdue: [], bars: [], timed: [], untimed: [] });
+    expect(a).toEqual({ date: "2026-09-22", overdue: [], bars: [], timed: [], untimed: [], goals: [] });
   });
 
   it("fills overdue only for today, with uncompleted items due earlier", () => {
