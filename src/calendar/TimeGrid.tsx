@@ -160,6 +160,11 @@ export function TimeGrid({
               </span>
             ))}
           </div>
+          <div className="tgrid__lines" aria-hidden="true">
+            {HOURS.map((h) => (
+              <span key={h} />
+            ))}
+          </div>
           {dates.map((d) => (
             <div
               key={d}
