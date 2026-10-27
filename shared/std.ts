@@ -1,1 +1,1 @@
-export const STD_APP_URL = "https://apps.matteob.dev/projects/savethedate/";
+export const STD_APP_URL = "https://savethedate.matteob.dev/";
