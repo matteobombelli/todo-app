@@ -3033,7 +3033,8 @@ div.form__error p {
 }
 
 .log-row__note {
-  font-size: 0.9375rem;
+  /* 16px or more, or iOS Safari zooms the page in on focus and leaves it zoomed. */
+  font-size: 1rem;
 }
 
 .heatmap {
